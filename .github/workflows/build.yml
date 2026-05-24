@@ -237,13 +237,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "Cronix ${{ github.ref_name }}"
-          body: |
-            ## Changes
-            - Linux amd64 binary (`cronix-linux-amd64`)
-            - See [README.md](https://github.com/riverisagame/cronix/blob/master/README.md) for deployment instructions.
-            - Checksums:
-            ```
-            SHA256: ${{ hashFiles('cronix-linux-amd64') }}
-            ```
+          body: "Linux amd64 binary. See README for deployment instructions."
           files: cronix-linux-amd64
-          generate_release_notes: true
