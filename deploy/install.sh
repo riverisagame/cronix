@@ -21,12 +21,24 @@ echo "[OK] 目录结构创建完成"
 
 # 3. 下载/复制二进制文件
 if [ -f "./cronix-linux" ]; then
-    cp ./cronix-linux "$APP_DIR/"
+    cp ./cronix-linux "$APP_DIR/cronix"
 else
     curl -L -o "$APP_DIR/cronix" "$BIN_URL"
 fi
+# 确保有执行权限（chmod +x 设置可执行位）
 chmod +x "$APP_DIR/cronix"
-echo "[OK] 二进制文件就绪"
+# 验证权限是否生效
+if [ ! -x "$APP_DIR/cronix" ]; then
+    echo "[FAIL] 二进制文件缺少执行权限，尝试用 sudo 重新设置"
+    sudo chmod +x "$APP_DIR/cronix"
+fi
+# 验证文件存在且可执行（-x 检查可执行位是否设置）
+if [ -x "$APP_DIR/cronix" ]; then
+    echo "[OK] 二进制文件就绪（可执行权限已确认）"
+else
+    echo "[FAIL] 无法设置执行权限，请手动执行: sudo chmod +x $APP_DIR/cronix"
+    exit 1
+fi
 
 # 4. 复制配置文件（如果不存在）
 if [ ! -f "$APP_DIR/config.yaml" ]; then
