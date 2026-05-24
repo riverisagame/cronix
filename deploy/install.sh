@@ -1,6 +1,7 @@
 #!/bin/bash
 # Cronix 一键安装脚本（适用于 Debian/Ubuntu amd64）
-# 用法: sudo bash install.sh
+# 用法: curl -fsSL https://raw.githubusercontent.com/riverisagame/cronix/master/deploy/install.sh | sudo bash
+# 或者本地运行: sudo bash install.sh
 set -e
 
 APP_DIR="/opt/cronix"
@@ -100,13 +101,71 @@ if [ -f "$APP_DIR/config.yaml" ]; then
     # 备份旧配置
     cp "$APP_DIR/config.yaml" "$APP_DIR/config.yaml.bak.$(date +%Y%m%d%H%M%S)"
     green "[OK] 已备份旧配置到 .bak.$(date +%Y%m%d%H%M%S)"
+elif [ -f "./config.yaml" ]; then
+    cp ./config.yaml "$APP_DIR/config.yaml"
+    green "[OK] 已创建配置文件（来自本地 config.yaml）"
 else
-    if [ -f "./config.yaml" ]; then
-        cp ./config.yaml "$APP_DIR/config.yaml"
-        green "[OK] 已创建配置文件"
-    else
-        warn "[WARN] 未找到 config.yaml，首次启动前请手动创建"
-    fi
+    # curl|bash 场景：无本地文件，写入默认配置
+    cat > "$APP_DIR/config.yaml" << 'CFG_EOF'
+# ============================================================
+# config.yaml - Cronix 默认配置文件
+# 程序启动时会读取这个文件来获取运行参数
+# 修改后大多数配置会自动生效，无需重启
+# ============================================================
+
+# --- 服务器配置 ---
+server:
+  port: 8080                     # HTTP 服务监听的端口号
+  graceful_timeout: 30s          # 优雅关闭最长等待时间
+  tls:
+    enabled: false               # 是否开启 HTTPS
+    cert_file: ""                # TLS 证书文件路径
+    key_file: ""                 # TLS 私钥文件路径
+  webui:
+    enabled: true                # 是否开启 Web Dashboard 界面
+  api:
+    enabled: true                # 是否开启 REST API 接口
+
+# --- 认证配置 ---
+auth:
+  username: admin                # 默认登录用户名
+  password: ""                   # 密码（通过 "cronix passwd" 命令设置）
+  jwt_secret: ""                 # JWT 签名密钥（首次启动自动生成）
+
+# --- 数据库配置 ---
+database:
+  path: ./data/cronix.db         # SQLite 数据库文件存放位置
+  wal_mode: true                 # WAL 模式（Write-Ahead Logging），提高并发读写性能
+  busy_timeout: 5000             # 数据库忙等待超时（毫秒）
+  cache_size: 2000               # 数据库缓存页数
+
+# --- 执行器配置 ---
+executor:
+  pool_size: 32                  # 协程池大小（同时最多执行多少个任务）
+  output_truncate_kb: 64         # 任务输出最大保留大小（KB），超出部分截断
+  memory_limit_mb: 512           # 内存使用上限（MB）
+
+# --- 日志配置 ---
+log:
+  level: info                    # 日志级别：debug(调试) / info(常规) / warn(警告) / error(错误)
+  file: ./data/cronix.log        # 日志文件路径
+  max_size_mb: 100               # 单个日志文件最大体积（MB），超出后自动切割
+  max_backups: 7                 # 最多保留的旧日志文件数量
+  max_age_days: 30               # 日志文件最长保留天数
+  retention_days: 30             # 数据库中执行记录保留天数
+  max_records: 100000            # 数据库中执行记录最大条数
+
+# --- 通知配置 ---
+notify:
+  retry: 3                       # 通知发送失败后的重试次数
+  retry_interval: 5s             # 重试间隔时间
+
+# --- 熔断器配置 ---
+circuit_breaker:
+  failure_threshold: 5           # HTTP 任务连续失败多少次后触发熔断
+  cooldown_seconds: 60           # 熔断后冷却多少秒再尝试恢复
+CFG_EOF
+    green "[OK] 已写入默认配置文件"
 fi
 
 # ============================================================
@@ -133,16 +192,45 @@ else
 fi
 
 # ============================================================
-# 8. 安装 systemd 服务（覆盖安装）
+# 8. 安装 systemd 服务（内容自包含，支持 curl|bash）
 # ============================================================
-if [ -f "./deploy/cronix.service" ]; then
-    cp ./deploy/cronix.service /etc/systemd/system/cronix.service
-elif [ -f "/opt/cronix/deploy/cronix.service" ]; then
-    cp /opt/cronix/deploy/cronix.service /etc/systemd/system/cronix.service
-else
-    red "[FAIL] 找不到 cronix.service 文件"
-    exit 1
-fi
+cat > /etc/systemd/system/cronix.service << 'SVC_EOF'
+[Unit]
+Description=Cronix Task Scheduler
+Documentation=https://github.com/riverisagame/cronix
+After=network.target
+
+[Service]
+Type=simple
+User=cronix
+Group=cronix
+WorkingDirectory=/opt/cronix
+ExecStart=/opt/cronix/cronix serve -c /opt/cronix/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+
+# 安全加固
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/cronix/data
+ReadOnlyPaths=/opt/cronix/config.yaml
+PrivateTmp=yes
+
+# 资源限制
+MemoryHigh=512M
+MemoryMax=1G
+CPUQuota=200%
+
+# 日志 → journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cronix
+
+[Install]
+WantedBy=multi-user.target
+SVC_EOF
 systemctl daemon-reload
 green "[OK] systemd 服务已安装"
 
