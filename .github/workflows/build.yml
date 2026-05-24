@@ -3,10 +3,9 @@ name: Build & Verify
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]
   pull_request:
     branches: [main, master]
-  release:
-    types: [published]
 
 jobs:
   # ============================================================
@@ -220,10 +219,10 @@ jobs:
           echo "Server stopped"
 
   # ============================================================
-  # Job 3: Release（仅 tag 推送时触发）
+  # Job 3: 推送 tag 时自动创建 Release 并上传二进制
   # ============================================================
   release:
-    if: github.event_name == 'release'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: verify
     runs-on: ubuntu-latest
     steps:
@@ -232,7 +231,17 @@ jobs:
         with:
           name: cronix-linux-amd64
 
-      - name: "Upload to release"
+      - name: "Create Release and upload binary"
         uses: softprops/action-gh-release@v2
         with:
+          name: "Cronix ${{ github.ref_name }}"
+          body: |
+            ## Changes
+            - Linux amd64 binary (`cronix-linux-amd64`)
+            - See [README.md](https://github.com/riverisagame/cronix/blob/master/README.md) for deployment instructions.
+            - Checksums:
+            ```
+            SHA256: ${{ hashFiles('cronix-linux-amd64') }}
+            ```
           files: cronix-linux-amd64
+          generate_release_notes: true
