@@ -1,0 +1,27 @@
+# Git
+.git/
+.gitignore
+
+# Node
+web/node_modules/
+web/dist/
+
+# Build artifacts
+*.exe
+cronix-linux
+
+# IDE
+.vscode/
+.idea/
+
+# Data (use volume)
+data/
+
+# Docs
+docs/
+*.md
+!README.md
+
+# Temp
+tmp/
+*.log

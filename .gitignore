@@ -1,0 +1,41 @@
+﻿# ============================================================
+# .gitignore - Git 忽略文件配置
+# 告诉 Git 哪些文件/文件夹不需要版本控制
+# ============================================================
+
+# data/ 文件夹存放运行时数据（数据库、日志），不提交到仓库
+/data/
+
+# web/dist/ 是前端构建产物，由 go:embed 打包进二进制，不需要单独提交
+/web/dist/
+
+# web/node_modules/ 是前端依赖包（npm install 下载的），不提交
+/web/node_modules/
+
+# *.exe 是 Windows 下编译出的可执行文件，不提交
+*.exe
+
+# *.log 是运行日志文件，不提交
+*.log
+
+# IDE 配置文件（如果你用 VSCode 或 GoLand）
+.vscode/
+.idea/
+
+# 二进制文件
+cronix-linux
+cronix-linux-amd64
+*.exe~
+
+# 测试截图
+*.png
+
+# Playwright MCP 临时文件
+.playwright-mcp/
+
+# 临时脚本
+hash.txt
+set-passwd.py
+prod-test.sh
+stress-test.sh
+test-suite.sh

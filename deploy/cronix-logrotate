@@ -1,0 +1,13 @@
+# Cronix 日志轮转（防止 journald / 文件日志撑爆磁盘）
+# 安装: sudo cp deploy/cronix-logrotate /etc/logrotate.d/cronix
+
+/opt/cronix/data/cronix.log {
+    daily            # 每天轮转一次
+    rotate 7         # 保留最近 7 个
+    maxsize 100M     # 大于 100MB 强制轮转
+    missingok        # 日志文件不存在不报错
+    notifempty       # 空的就不轮转
+    compress         # 压缩旧日志
+    delaycompress    # 昨天的日志延迟一天压缩（给程序写入时间）
+    copytruncate     # 复制后截断原文件（不改动文件句柄）
+}

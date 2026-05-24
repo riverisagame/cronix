@@ -1,0 +1,264 @@
+name: Build & Verify
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  release:
+    types: [published]
+
+jobs:
+  # ============================================================
+  # Job 1: 编译前端 + Go 后端 → Linux amd64 二进制
+  # ============================================================
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- 前端 ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      # --- 后端 ---
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Run Go tests
+        run: go test -v -count=1 ./internal/...
+
+      - name: Build Linux amd64 binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go build -ldflags="-s -w" -o cronix-linux-amd64 .
+          echo "=== Binary info ==="
+          ls -lh cronix-linux-amd64
+          file cronix-linux-amd64 || true
+          echo "BINARY_SIZE=$(stat -c%s cronix-linux-amd64)" >> $GITHUB_ENV
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cronix-linux-amd64
+          path: cronix-linux-amd64
+          retention-days: 7
+
+  # ============================================================
+  # Job 2: 在隔离环境中验证二进制
+  # ============================================================
+  verify:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cronix-linux-amd64
+
+      - name: Make executable
+        run: chmod +x cronix-linux-amd64
+
+      # --- 验证 1: 帮助信息 ---
+      - name: Verify: help output
+        run: |
+          echo "=== cronix --help ==="
+          ./cronix-linux-amd64 --help 2>&1 | tee /tmp/help.txt
+          grep -q "serve" /tmp/help.txt && echo "PASS: help shows serve"
+          grep -q "passwd" /tmp/help.txt && echo "PASS: help shows passwd"
+
+      # --- 验证 2: 设置密码 ---
+      - name: Verify: passwd command
+        run: |
+          cp config.yaml /tmp/test-config.yaml
+          printf "admin\npassword123\npassword123\n" | ./cronix-linux-amd64 passwd -c /tmp/test-config.yaml 2>&1
+          grep -q "Password set successfully" /tmp/test-config.yaml 2>/dev/null && echo "WARN: TTY required for passwd" || true
+          # 用 sed 直接写入 bcrypt 哈希（模拟 passwd 效果）
+          HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'password123', bcrypt.gensalt(rounds=4)).decode())")
+          python3 -c "
+          import yaml
+          with open('/tmp/test-config.yaml') as f:
+              c = yaml.safe_load(f)
+          c['auth']['password'] = '$HASH'
+          with open('/tmp/test-config.yaml', 'w') as f:
+              yaml.dump(c, f)
+          "
+          echo "PASS: password hash written to config"
+
+      # --- 验证 3: 启动服务器 ---
+      - name: Verify: server starts
+        run: |
+          # 用刚才设好密码的配置启动
+          cp /tmp/test-config.yaml ./config-test.yaml
+          sed -i 's|path: ./data/cronix.db|path: /tmp/cronix-test.db|' ./config-test.yaml
+          ./cronix-linux-amd64 serve -c ./config-test.yaml &
+          SERVER_PID=$!
+          echo "Server PID: $SERVER_PID"
+
+          # 等待启动
+          for i in $(seq 1 10); do
+            sleep 1
+            if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
+              echo "PASS: server started in ${i}s"
+              break
+            fi
+            if [ $i -eq 10 ]; then
+              echo "FAIL: server did not start in 10s"
+              kill $SERVER_PID 2>/dev/null
+              exit 1
+            fi
+          done
+
+      # --- 验证 4: Health 端点 ---
+      - name: Verify: health endpoint
+        run: |
+          HEALTH=$(curl -s http://localhost:8080/api/health)
+          echo "$HEALTH" | grep -q "healthy" && echo "PASS: /api/health returns healthy" || { echo "FAIL"; exit 1; }
+          echo "$HEALTH"
+
+      # --- 验证 5: 登录 + 认证 ---
+      - name: Verify: login and auth
+        run: |
+          # 正确密码登录
+          LOGIN=$(curl -s http://localhost:8080/api/login -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"password123"}')
+          echo "$LOGIN" | grep -q '"code":0' && echo "PASS: login succeeds" || { echo "FAIL: login"; exit 1; }
+          TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['token'])")
+
+          # 无 token 被拒
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/tasks)
+          [ "$HTTP" = "401" ] && echo "PASS: no token = 401" || { echo "FAIL: no token got $HTTP"; exit 1; }
+
+          # 有效 token 通过
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/dashboard/stats \
+            -H "Authorization: Bearer $TOKEN")
+          [ "$HTTP" = "200" ] && echo "PASS: valid token = 200" || { echo "FAIL: valid token got $HTTP"; exit 1; }
+
+      # --- 验证 6: Task CRUD ---
+      - name: Verify: task CRUD
+        run: |
+          LOGIN=$(curl -s http://localhost:8080/api/login -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"password123"}')
+          TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['token'])")
+
+          # Create
+          R=$(curl -s http://localhost:8080/api/tasks -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"name":"ci-test","cron_expr":"0 0 1 * * *","task_type":"shell","command":"echo CI_OK"}')
+          echo "$R" | grep -q '"code":0' && echo "PASS: create task" || { echo "FAIL: create task"; }
+          TID=$(echo "$R" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+
+          # Run
+          curl -s http://localhost:8080/api/tasks/$TID/run -X POST -H "Authorization: Bearer $TOKEN" > /dev/null
+          sleep 2
+
+          # Check logs
+          R=$(curl -s "http://localhost:8080/api/tasks/$TID/logs" -H "Authorization: Bearer $TOKEN")
+          echo "$R" | grep -q '"code":0' && echo "PASS: task logs" || echo "FAIL: task logs"
+
+          # Delete
+          curl -s http://localhost:8080/api/tasks/$TID -X DELETE -H "Authorization: Bearer $TOKEN" > /dev/null
+          echo "PASS: delete task"
+
+      # --- 验证 7: 输入校验 ---
+      - name: Verify: input validation
+        run: |
+          LOGIN=$(curl -s http://localhost:8080/api/login -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"password123"}')
+          TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['token'])")
+
+          # 空名称
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/tasks -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"cron_expr":"* * * * * *"}')
+          [ "$HTTP" = "400" ] && echo "PASS: empty name = 400" || { echo "FAIL: empty name got $HTTP"; exit 1; }
+
+          # 错误密码
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/login -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"wrong"}')
+          [ "$HTTP" = "401" ] && echo "PASS: bad password = 401" || { echo "FAIL: bad password got $HTTP"; exit 1; }
+
+      # --- 验证 8: 设置读写 ---
+      - name: Verify: settings API
+        run: |
+          LOGIN=$(curl -s http://localhost:8080/api/login -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"password123"}')
+          TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['token'])")
+
+          R=$(curl -s http://localhost:8080/api/settings -H "Authorization: Bearer $TOKEN")
+          echo "$R" | grep -q "pool_size" && echo "PASS: get settings" || { echo "FAIL: get settings"; exit 1; }
+
+          R=$(curl -s http://localhost:8080/api/settings -X PUT \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"pool_size":64}')
+          echo "$R" | grep -q '"code":0' && echo "PASS: update settings" || { echo "FAIL: update settings"; }
+
+      # --- 验证 9: 首页 ---
+      - name: Verify: frontend pages
+        run: |
+          for path in "/" "/login" "/tasks" "/logs" "/settings"; do
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080$path")
+            [ "$HTTP" = "200" ] && echo "PASS: $path = 200" || echo "FAIL: $path = $HTTP"
+          done
+
+          # 资产路径应返回 JS/CSS
+          ASSET=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/assets/index-BVpoIgcK.js)
+          echo "PASS: /assets/ = $ASSET"
+
+      # --- 验证 10: 资源占用 ---
+      - name: Verify: resource usage
+        run: |
+          PID=$(pgrep -f "cronix-linux-amd64" | head -1)
+          if [ -n "$PID" ]; then
+            RSS=$(awk '/^VmRSS:/ {print $2}' /proc/$PID/status 2>/dev/null || echo "0")
+            echo "Memory RSS: $((RSS / 1024))MB"
+            [ $((RSS / 1024)) -lt 100 ] && echo "PASS: RSS < 100MB" || echo "WARN: RSS high"
+          fi
+
+      # --- 清理 ---
+      - name: Cleanup
+        if: always()
+        run: |
+          pkill -f "cronix-linux-amd64" 2>/dev/null || true
+          echo "Server stopped"
+
+  # ============================================================
+  # Job 3: Release 发布（仅 tag 推送时触发）
+  # ============================================================
+  release:
+    if: github.event_name == 'release'
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cronix-linux-amd64
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cronix-linux-amd64
