@@ -339,6 +339,8 @@ const CRON_MACROS: Record<string,string> = {
   '@hourly':  '0 0 * * * *',
 }
 const cronMacros = [
+  { label:'@every 10s', value:'*/10 * * * * *' },
+  { label:'@every 30s', value:'*/30 * * * * *' },
   { label:'@hourly', value:'@hourly' }, { label:'@daily', value:'@daily' },
   { label:'@weekly', value:'@weekly' }, { label:'@monthly', value:'@monthly' },
   { label:'@every 5m', value:'0 */5 * * * *' },
