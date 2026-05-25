@@ -53,12 +53,10 @@ func (s *GroupService) DeleteGroup(id uint) error {
     return s.DB.Delete(&model.TaskGroup{}, id).Error
 }
 
-// GetGroupMembers returns all tasks belonging to a group, ordered by group mode.
+// GetGroupMembers returns all tasks belonging to a group, ordered by sort_order.
 func (s *GroupService) GetGroupMembers(groupID uint) ([]model.Task, error) {
     var tasks []model.Task
-    // For sequential groups, order by the task's inherent order.
-    // For now use ID order; a proper sort_order column can be added later.
-    if err := s.DB.Where("group_id = ?", groupID).Order("id ASC").Find(&tasks).Error; err != nil {
+    if err := s.DB.Where("group_id = ?", groupID).Order("sort_order ASC, id ASC").Find(&tasks).Error; err != nil {
         return nil, err
     }
     return tasks, nil
@@ -72,9 +70,14 @@ func (s *GroupService) SetGroupMembers(groupID uint, taskIDs []uint) error {
         if err := tx.Model(&model.Task{}).Where("group_id = ?", groupID).Update("group_id", nil).Error; err != nil {
             return err
         }
-        // Assign new members
-        if len(taskIDs) > 0 {
-            return tx.Model(&model.Task{}).Where("id IN ?", taskIDs).Update("group_id", groupID).Error
+        // Assign new members with sort_order based on array position
+        for i, tid := range taskIDs {
+            if err := tx.Model(&model.Task{}).Where("id = ?", tid).Updates(map[string]interface{}{
+                "group_id":   groupID,
+                "sort_order": i,
+            }).Error; err != nil {
+                return err
+            }
         }
         return nil
     })

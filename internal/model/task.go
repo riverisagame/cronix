@@ -134,6 +134,9 @@ type Task struct {
     // GroupID 所属任务组ID，nil 表示不属于任何组
     GroupID *uint `gorm:"index" json:"group_id,omitempty"`
 
+    // SortOrder 在组内的排序位置（sequential 模式用），数字越小越先执行
+    SortOrder int `gorm:"default:0" json:"sort_order"`
+
     // GroupName 任务组名称（查询时计算，不存入数据库）
     GroupName string `gorm:"-" json:"group_name,omitempty"`
 

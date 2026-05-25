@@ -75,14 +75,25 @@
           </div>
           <div style="border:1px solid #409EFF;border-radius:4px;min-height:200px;max-height:400px;overflow:auto;padding:8px">
             <div v-for="(t, idx) in members" :key="t.id"
-              style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;margin-bottom:4px;background:#1a2a3a;border-radius:4px">
+              :draggable="form.mode==='sequential'"
+              @dragstart="onDragStart($event, idx)"
+              @dragover.prevent="onDragOver($event, idx)"
+              @drop="onDrop($event, idx)"
+              @dragend="dragIdx = -1"
+              :style="{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 8px',marginBottom:'4px',background: dragIdx === idx ? '#2a3a4a' : '#1a2a3a',borderRadius:'4px',cursor: form.mode==='sequential' ? 'grab' : 'default',opacity: dragIdx === idx ? 0.6 : 1,transition:'all 0.15s'}">
               <span>
                 <el-tag v-if="form.mode==='sequential'" size="small" type="warning" style="margin-right:6px">{{ idx + 1 }}</el-tag>
                 <span style="font-size:13px">{{ t.name }}</span>
               </span>
-              <el-button size="small" type="danger" circle @click="removeMember(t, idx)">
-                <el-icon><Close /></el-icon>
-              </el-button>
+              <span style="display:flex;gap:4px">
+                <template v-if="form.mode==='sequential'">
+                  <el-button size="small" :disabled="idx===0" @click="moveMember(idx, -1)" style="padding:2px 6px" title="Move up">↑</el-button>
+                  <el-button size="small" :disabled="idx===members.length-1" @click="moveMember(idx, 1)" style="padding:2px 6px" title="Move down">↓</el-button>
+                </template>
+                <el-button size="small" type="danger" circle @click="removeMember(t, idx)">
+                  <el-icon><Close /></el-icon>
+                </el-button>
+              </span>
             </div>
             <div v-if="members.length===0" style="text-align:center;color:#909399;padding:20px">
               Click tasks on the left to add them
@@ -227,6 +238,23 @@ function addMember(t: any) {
 
 function removeMember(_t: any, idx: number) {
   members.value.splice(idx, 1)
+}
+
+const dragIdx = ref(-1)
+function onDragStart(e: DragEvent, idx: number) { dragIdx.value = idx; e.dataTransfer!.effectAllowed = 'move' }
+function onDragOver(e: DragEvent, idx: number) {
+  if (dragIdx.value < 0 || dragIdx.value === idx) return
+  // Swap the dragged item with the target
+  const arr = members.value
+  const item = arr.splice(dragIdx.value, 1)[0]
+  arr.splice(idx, 0, item)
+  dragIdx.value = idx
+}
+function onDrop(_e: DragEvent, _idx: number) { dragIdx.value = -1 }
+function moveMember(idx: number, delta: number) {
+  const arr = members.value; const newIdx = idx + delta
+  if (newIdx < 0 || newIdx >= arr.length) return
+  const item = arr.splice(idx, 1)[0]; arr.splice(newIdx, 0, item)
 }
 
 async function loadAllTasks() {
