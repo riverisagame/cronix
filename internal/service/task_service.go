@@ -41,6 +41,26 @@ func (s *TaskService) ListTasks(page, pageSize int, search string) ([]model.Task
     if err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&tasks).Error; err != nil {
         return nil, 0, err
     }
+    // 填充任务组名称
+    var gids []uint
+    for _, t := range tasks {
+        if t.GroupID != nil {
+            gids = append(gids, *t.GroupID)
+        }
+    }
+    if len(gids) > 0 {
+        var groups []model.TaskGroup
+        s.DB.Where("id IN ?", gids).Find(&groups)
+        gm := make(map[uint]string, len(groups))
+        for _, g := range groups {
+            gm[g.ID] = g.Name
+        }
+        for i := range tasks {
+            if tasks[i].GroupID != nil {
+                tasks[i].GroupName = gm[*tasks[i].GroupID]
+            }
+        }
+    }
     return tasks, total, nil
 }
 
@@ -51,6 +71,12 @@ func (s *TaskService) GetTask(id uint) (*model.Task, error) {
     var task model.Task
     if err := s.DB.First(&task, id).Error; err != nil {          // First：按主键查找第一条记录
         return nil, err
+    }
+    if task.GroupID != nil {
+        var g model.TaskGroup
+        if err := s.DB.First(&g, *task.GroupID).Error; err == nil {
+            task.GroupName = g.Name
+        }
     }
     return &task, nil                                            // 返回任务指针
 }

@@ -123,7 +123,7 @@
         <!-- 所属任务组列 -->
         <el-table-column label="Group" width="130">
           <template #default="{ row }">
-            <el-tag v-if="row.group_id" size="small" type="warning">G{{ row.group_id }}</el-tag>
+            <el-tag v-if="row.group_name" size="small" type="warning">{{ row.group_name }}</el-tag>
             <span v-else style="color:#909399;font-size:12px">—</span>
           </template>
         </el-table-column>
