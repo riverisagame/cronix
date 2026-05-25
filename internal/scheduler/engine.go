@@ -9,6 +9,7 @@ package scheduler
 
 import (
     "context"     // 上下文：用来传递取消信号、超时控制
+    "strings"     // 字符串处理：检查cron字段数量
     "sync"        // 并发控制：互斥锁
 
     "cronix/internal/model" // 数据模型：任务结构体
@@ -79,8 +80,13 @@ func (e *Engine) ReloadAll() error {
     // 第四步：把每个启用的任务注册到定时器中
     for _, task := range tasks {                                // 遍历所有查询到的任务
         taskID := task.ID                                       // 保存任务ID（闭包用，避免循环变量问题）
+        expr := task.CronExpr                                   // 获取原始cron表达式
+        // 兼容5字段cron：缺少秒位则自动补充 "0 " 前缀
+        if len(strings.Fields(expr)) == 5 {
+            expr = "0 " + expr
+        }
         // AddFunc 给Cron添加一个函数，到时间就执行
-        entryID, err := e.cron.AddFunc(task.CronExpr, func() {  // task.CronExpr是定时表达式，如"0 */5 * * * *"表示每5分钟
+        entryID, err := e.cron.AddFunc(expr, func() {           // expr是定时表达式，如"0 */5 * * * *"表示每5分钟
             e.triggerCh <- taskID                               // 到点后把任务ID发到触发通道
         })
         if err != nil {                                         // 如果添加失败（比如Cron表达式不合法）
