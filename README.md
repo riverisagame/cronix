@@ -131,7 +131,10 @@ web/           Vue 3 + Element Plus frontend (Vite)
 最轻量、最稳定的生产方案。systemd 负责进程守护和崩溃自愈，Nginx 负责 TLS 和反向代理。
 
 ```bash
-# 安装
+# 方式 A: curl 一键安装（推荐）
+curl -fsSL https://raw.githubusercontent.com/riverisagame/cronix/master/deploy/install.sh | sudo bash
+
+# 方式 B: 克隆后本地安装
 sudo bash deploy/install.sh
 
 # 设置密码
