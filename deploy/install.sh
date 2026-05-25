@@ -115,6 +115,7 @@ else
 
 # --- 服务器配置 ---
 server:
+  host: "0.0.0.0"               # 绑定的IP地址，0.0.0.0=所有网卡，127.0.0.1=仅本地
   port: 8080                     # HTTP 服务监听的端口号
   graceful_timeout: 30s          # 优雅关闭最长等待时间
   tls:
@@ -259,4 +260,10 @@ echo "5. (推荐) 配置反向代理 + HTTPS:"
 echo "   宝塔面板: 网站 → 反向代理 → 目标URL http://127.0.0.1:$PORT → SSL 申请证书"
 echo "   纯 Nginx: 参考 deploy/nginx-cronix.conf"
 echo "   详见 README: https://github.com/riverisagame/cronix#deployment-linux-production"
+echo ""
+echo "6. (可选) 以其他用户执行任务（run_as 功能）:"
+echo "   如需指定 Shell 任务以特定用户身份运行，需配置 sudoers："
+echo "   echo '$SERVICE_USER ALL=(worker) NOPASSWD: /bin/sh' > /etc/sudoers.d/cronix"
+echo "   将 worker 替换为实际用户名，多个用户用逗号分隔"
+echo "   详见 README 中 run_as 文档"
 echo "============================================"

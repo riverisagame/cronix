@@ -309,7 +309,7 @@ func runServe(cmd *cobra.Command, args []string) {
     // --- 第13步：启动 HTTP(S) 服务器 ---
     // fmt.Sprintf(":%d", cfg.Server.Port) 把端口号拼成地址字符串
     // 例如端口号 8080 会变成 ":8080"（冒号表示监听所有网络接口）
-    addr := fmt.Sprintf(":%d", cfg.Server.Port)
+    addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 
     if cfg.Server.API.Enabled {
         // API 模式已启用，启动 HTTP 服务器

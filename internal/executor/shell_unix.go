@@ -30,16 +30,22 @@ type ShellResult struct {
 // 参数 command：要执行的命令
 // 参数 workDir：工作目录
 // 参数 timeoutSec：超时秒数
+// 参数 runAs：以哪个用户执行，空串表示当前用户
 // 返回值：ShellResult指针
-func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSec int) *ShellResult {
+func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSec int, runAs string) *ShellResult {
     // 第一步：创建独立的超时上下文
     // 使用 context.Background() 而不是传入的ctx，是为了让超时独立管理
     tCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
     defer cancel()                                              // 函数结束时取消上下文
 
     // 第二步：创建命令对象
-    // Unix系统使用 sh -c 来执行命令（sh是Unix的标准Shell）
-    cmd := exec.CommandContext(tCtx, "sh", "-c", command)
+    var cmd *exec.Cmd
+    if runAs != "" {
+        // 以指定用户身份执行：sudo -u <user> sh -c "command"
+        cmd = exec.CommandContext(tCtx, "sudo", "-u", runAs, "sh", "-c", command)
+    } else {
+        cmd = exec.CommandContext(tCtx, "sh", "-c", command)
+    }
     if workDir != "" {
         cmd.Dir = workDir                                       // 设置工作目录
     }

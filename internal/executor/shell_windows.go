@@ -25,8 +25,9 @@ type ShellResult struct {
 // 参数 command：要执行的命令字符串
 // 参数 workDir：工作目录（命令在哪个目录下执行），空字符串表示当前目录
 // 参数 timeoutSec：超时时间（秒），超过这个时间就强制终止
+// 参数 runAs：Windows下忽略
 // 返回值：ShellResult指针，包含输出、退出码、错误信息
-func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSec int) *ShellResult {
+func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSec int, runAs string) *ShellResult {
     // 第一步：创建一个带超时的上下文
     // time.Duration(timeoutSec)*time.Second 把秒数转成Go标准的时间长度类型
     tCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)

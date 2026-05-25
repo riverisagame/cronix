@@ -136,6 +136,11 @@ type Task struct {
     // 选填，不写就在当前目录下执行
     WorkDir string `json:"work_dir,omitempty"`
 
+    // RunAs 以哪个用户身份执行（仅 Shell 类型生效）
+    // 非空时通过 sudo -u <user> 切换用户，需在 sudoers 中授权 cronix 用户
+    // 选填，不写就以 cronix 用户身份执行
+    RunAs string `json:"run_as,omitempty"`
+
     // CreatedAt 任务创建时间
     // time.Time 类型存的是完整的日期时间（如 2024-05-01 12:30:00）
     // GORM 自动管理这个字段：插入记录时自动填当前时间

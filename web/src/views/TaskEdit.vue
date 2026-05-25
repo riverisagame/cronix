@@ -94,6 +94,11 @@
           <el-form-item label="Work Directory">
             <el-input v-model="form.work_dir" placeholder="/opt/scripts" />
           </el-form-item>
+
+          <!-- 以哪个用户执行（需配置 sudoers），非必填 -->
+          <el-form-item label="Run As User">
+            <el-input v-model="form.run_as" placeholder="Leave empty to run as cronix" />
+          </el-form-item>
         </template>
 
         <!--
@@ -235,7 +240,7 @@ const saving = ref(false)
  *   enabled: 是否启用，默认 true（启用）
  *   description: 任务描述（空）
  */
-const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'', timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
 
 /**
  * onMounted：页面加载完成后执行。

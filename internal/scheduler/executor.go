@@ -283,7 +283,7 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog) 
     switch task.TaskType {                                       // 根据不同任务类型，走不同分支
     case "shell":
         // Shell任务：在操作系统命令行中执行一条命令
-        result := executor.ExecuteShell(ctx, task.Command, task.WorkDir, task.TimeoutSec)
+        result := executor.ExecuteShell(ctx, task.Command, task.WorkDir, task.TimeoutSec, task.RunAs)
         if result.Error != nil {
             execLog.Status = "failed"
             execLog.ErrorMsg = result.Error.Error()

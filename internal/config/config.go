@@ -83,6 +83,8 @@ type Config struct {
 
 // ServerConfig 定义 Web 服务器的行为
 type ServerConfig struct {
+    // Host 绑定的IP地址，"0.0.0.0" 表示监听所有网卡，"127.0.0.1" 表示仅本地访问
+    Host string `mapstructure:"host"`
     // Port 端口号：相当于服务器的"门牌号"
     // 浏览器访问 http://localhost:8080 中的 8080 就是端口号
     // 范围必须是 1-65535
@@ -316,6 +318,7 @@ func Load(configPath string) (*Config, error) {
 
     // --- 第2步：设置默认值（如果用户没配置就用这些）---
     v.SetDefault("server.port", 8080)                           // 默认端口 8080
+    v.SetDefault("server.host", "0.0.0.0")                     // 默认监听所有网卡
     v.SetDefault("server.graceful_timeout", "30s")              // 默认优雅退出等待 30 秒
     v.SetDefault("executor.pool_size", 32)                      // 默认最多同时执行 32 个任务
     v.SetDefault("executor.output_truncate_kb", 64)             // 默认输出截断到 64KB
