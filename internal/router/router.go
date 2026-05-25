@@ -30,6 +30,7 @@ import (
 func SetupRouter(
     cfg *config.Config, authH *handler.AuthHandler,
     taskH *handler.TaskHandler, logH *handler.LogHandler,
+    groupH *handler.GroupHandler,
     webDist embed.FS,                                          // embed.FS 是Go的嵌入文件系统类型
 ) *gin.Engine {
     // 设置为发布模式（关闭调试输出，提高性能）
@@ -72,6 +73,15 @@ func SetupRouter(
         api.GET("/dashboard/stats", logH.GetDashboardStats)    // 仪表盘统计数据
         api.GET("/settings", logH.GetSettings)                 // 读取系统设置
         api.PUT("/settings", logH.UpdateSettings)              // 修改系统设置
+
+        // ---- 任务组管理 ----
+        api.GET("/groups", groupH.ListGroups)                  // 获取组列表
+        api.POST("/groups", groupH.CreateGroup)                // 创建组
+        api.GET("/groups/:id", groupH.GetGroup)                // 获取组详情（含成员）
+        api.PUT("/groups/:id", groupH.UpdateGroup)             // 更新组
+        api.DELETE("/groups/:id", groupH.DeleteGroup)          // 删除组
+        api.PUT("/groups/:id/members", groupH.SetMembers)      // 设置组成员
+        api.POST("/groups/:id/run", groupH.RunGroup)           // 手动触发整组
     }
 
     // ========== 前端网页托管（如果开启了WebUI功能） ==========

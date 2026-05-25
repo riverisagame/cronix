@@ -263,13 +263,14 @@ func runServe(cmd *cobra.Command, args []string) {
     authH := &handler.AuthHandler{} // 登录认证相关的请求处理
     taskH := &handler.TaskHandler{TaskSvc: taskSvc, ExecSvc: execSvc, Executor: exec} // 任务管理相关的请求处理
     logH := &handler.LogHandler{ExecSvc: execSvc} // 日志查看相关的请求处理
+    groupH := &handler.GroupHandler{GroupSvc: &service.GroupService{DB: database.DB}, TaskSvc: taskSvc, Executor: exec} // 任务组管理
 
     // --- 第10步：配置路由并启动 HTTP 服务器 ---
     // router.SetupRouter 创建一个 Gin 框架的路由引擎
     // 把所有的 URL 地址和对应的处理函数关联起来
     // 比如 "GET /api/tasks" -> taskH.ListTasks
     // webDist 是嵌入的前端文件，用于提供网页界面
-    r := router.SetupRouter(cfg, authH, taskH, logH, webDist)
+    r := router.SetupRouter(cfg, authH, taskH, logH, groupH, webDist)
 
     // --- 第11步：设置优雅退出 ---
     // 当用户按下 Ctrl+C 或者服务器收到终止信号时

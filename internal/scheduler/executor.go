@@ -378,3 +378,43 @@ func (e *Executor) notifyTaskResult(task *model.Task, execLog *model.ExecutionLo
 func (e *Executor) Shutdown() {
     e.pool.Release()                                             // 释放线程池
 }
+
+// RunGroup executes all tasks in a group according to the group's mode.
+// parallel: all tasks are submitted to the pool concurrently.
+// sequential: tasks run one by one in DB order; stops on first failure.
+func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task) {
+    log.Info().Str("group", g.Name).Str("mode", g.Mode).Int("members", len(members)).Msg("running group")
+
+    switch g.Mode {
+    case "parallel":
+        var wg sync.WaitGroup
+        for _, t := range members {
+            wg.Add(1)
+            task := t
+            e.pool.Submit(func() {
+                defer wg.Done()
+                defer func() {
+                    if r := recover(); r != nil {
+                        log.Error().Interface("panic", r).Str("task", task.Name).Msg("group task panic")
+                    }
+                }()
+                e.executeTask(task.ID)
+            })
+        }
+        wg.Wait()
+        log.Info().Str("group", g.Name).Msg("group (parallel) completed")
+
+    case "sequential":
+        for _, t := range members {
+            e.executeTask(t.ID)
+            // Check if the task failed
+            var lastLog model.ExecutionLog
+            e.db.Where("task_id = ?", t.ID).Order("id DESC").First(&lastLog)
+            if lastLog.Status == "failed" {
+                log.Warn().Str("group", g.Name).Str("task", t.Name).Msg("group (sequential) stopped due to failure")
+                break
+            }
+        }
+        log.Info().Str("group", g.Name).Msg("group (sequential) completed")
+    }
+}

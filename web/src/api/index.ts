@@ -139,3 +139,16 @@ export const settingsAPI = {
    */
   update(data: any) { return api.put('/settings', data) }
 }
+
+/**
+ * groupAPI：任务组管理相关的 API 调用函数。
+ */
+export const groupAPI = {
+  list() { return api.get('/groups') },
+  create(data: any) { return api.post('/groups', data) },
+  get(id: number) { return api.get('/groups/' + id) },
+  update(id: number, data: any) { return api.put('/groups/' + id, data) },
+  delete(id: number) { return api.delete('/groups/' + id) },
+  setMembers(id: number, taskIDs: number[]) { return api.put('/groups/' + id + '/members', { task_ids: taskIDs }) },
+  run(id: number) { return api.post('/groups/' + id + '/run') }
+}

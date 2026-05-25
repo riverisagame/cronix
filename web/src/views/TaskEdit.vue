@@ -75,6 +75,13 @@
           </el-radio-group>
         </el-form-item>
 
+        <!-- 所属任务组（可选） -->
+        <el-form-item label="Group">
+          <el-select v-model="form.group_id" placeholder="None" clearable style="width:250px">
+            <el-option v-for="g in groupList" :key="g.id" :label="g.name + ' (' + g.mode + ')'" :value="g.id" />
+          </el-select>
+        </el-form-item>
+
         <!-- 描述（非必填），type="textarea" 多行文本输入框 -->
         <el-form-item label="Description">
           <el-input v-model="form.description" type="textarea" rows="2" placeholder="Optional description" />
@@ -204,7 +211,7 @@ import { ref, computed, onMounted } from 'vue'
 // 导入路由工具
 import { useRoute, useRouter } from 'vue-router'
 // 导入任务 API
-import { taskAPI } from '../api/index'
+import { taskAPI, groupAPI } from '../api/index'
 // 导入返回箭头图标
 import { ArrowLeft } from '@element-plus/icons-vue'
 // 导入消息提示工具
@@ -243,7 +250,8 @@ const saving = ref(false)
  *   enabled: 是否启用，默认 true（启用）
  *   description: 任务描述（空）
  */
-const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'', timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'', group_id: null, timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+const groupList = ref<any[]>([])
 
 // --- cronHint: 将 cron 表达式翻译为人话 ---
 const WEEKDAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
@@ -290,6 +298,8 @@ const cronHint = computed(() => {
  * 如果是编辑模式（isNew 为 false），从后端加载已有任务的数据填入表单。
  */
 onMounted(async () => {
+  // Load group list for the selector
+  try { const r = await groupAPI.list(); groupList.value = r.data.data || [] } catch { /* ignore */ }
   // 如果不是新建模式（即编辑已有任务）
   if (!isNew.value) {
     try {

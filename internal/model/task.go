@@ -131,6 +131,9 @@ type Task struct {
     // 选填，不写也没关系
     Description string `json:"description,omitempty"`
 
+    // GroupID 所属任务组ID，nil 表示不属于任何组
+    GroupID *uint `gorm:"index" json:"group_id,omitempty"`
+
     // WorkDir 工作目录（shell 任务在哪个文件夹下面执行）
     // 比如指定为 "/home/user/scripts"，执行命令时会先切换到这个目录
     // 选填，不写就在当前目录下执行

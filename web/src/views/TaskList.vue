@@ -120,6 +120,14 @@
           </template>
         </el-table-column>
 
+        <!-- 所属任务组列 -->
+        <el-table-column label="Group" width="130">
+          <template #default="{ row }">
+            <el-tag v-if="row.group_id" size="small" type="warning">G{{ row.group_id }}</el-tag>
+            <span v-else style="color:#909399;font-size:12px">—</span>
+          </template>
+        </el-table-column>
+
         <!-- 启用/禁用开关列，居中对齐 -->
         <el-table-column label="Status" width="110" align="center">
           <template #default="{ row }">

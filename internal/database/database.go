@@ -140,6 +140,7 @@ func Init(dbPath string) error {
     if err := db.AutoMigrate(
         &model.Task{},         // 任务表（存每个定时任务的配置）
         &model.TaskDep{},      // 任务依赖关系表（存"A 依赖 B"这种关系）
+        &model.TaskGroup{},    // 任务组表（存任务分组和执行模式）
         &model.ExecutionLog{}, // 执行日志表（存每次任务执行的历史记录）
         &model.NotifyConfig{}, // 通知配置表（存每个任务的通知设置）
     ); err != nil {

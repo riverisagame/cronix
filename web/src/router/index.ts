@@ -81,6 +81,19 @@ const router = createRouter({
       name: 'Settings',
       component: () => import('../views/Settings.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      // /groups 路径对应任务组管理页面
+      path: '/groups',
+      name: 'GroupList',
+      component: () => import('../views/GroupList.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/groups/:id',
+      name: 'GroupEdit',
+      component: () => import('../views/GroupEdit.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })

@@ -67,6 +67,12 @@
           <span>Tasks</span>
         </el-menu-item>
 
+        <!-- 菜单项：跳转到 /groups（任务组管理页） -->
+        <el-menu-item index="/groups">
+          <el-icon><Grid /></el-icon>
+          <span>Groups</span>
+        </el-menu-item>
+
         <!-- 菜单项：跳转到 /logs（执行日志页） -->
         <el-menu-item index="/logs">
           <el-icon><Files /></el-icon>
@@ -147,7 +153,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 // 从 ElementPlus 图标库中引入我们需要用到的 5 个图标组件
-import { Odometer, List, Files, Setting, SwitchButton } from '@element-plus/icons-vue'
+import { Odometer, List, Grid, Files, Setting, SwitchButton } from '@element-plus/icons-vue'
 
 // useRoute() 返回当前路由对象，通过 route.path 可以知道用户正在访问哪个网址路径
 const route = useRoute()
@@ -167,9 +173,8 @@ const activeMenu = computed(() => {
   if (p === '/') return '/'
   // 如果路径以 /tasks 开头（包括 /tasks 和 /tasks/123），高亮 Tasks 菜单
   if (p.startsWith('/tasks')) return '/tasks'
-  // 如果路径以 /logs 开头，高亮 Execution Logs 菜单
+  if (p.startsWith('/groups')) return '/groups'
   if (p.startsWith('/logs')) return '/logs'
-  // 如果路径以 /settings 开头，高亮 Settings 菜单
   if (p.startsWith('/settings')) return '/settings'
   // 如果都不匹配，默认高亮 Dashboard
   return '/'
@@ -199,6 +204,8 @@ const pageTitle = computed(() => {
   if (route.path === '/tasks') return 'Task Management'
   // 以 /tasks/ 开头的路径（如 /tasks/1 编辑页面）显示 Task Editor（任务编辑器）
   if (route.path.startsWith('/tasks/')) return 'Task Editor'
+  if (route.path.startsWith('/groups/')) return 'Group Editor'
+  if (route.path === '/groups') return 'Task Groups'
   // 日志页显示 Execution Logs（执行日志）
   if (route.path === '/logs') return 'Execution Logs'
   // 设置页显示 Settings（设置）
