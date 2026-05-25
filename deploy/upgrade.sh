@@ -38,8 +38,7 @@ if [ -f "$APP_DIR/cronix" ]; then
     green "[OK] 已备份旧二进制 -> cronix.old"
 fi
 mv "$APP_DIR/cronix.new" "$APP_DIR/cronix"
-chmod 750 "$APP_DIR/cronix"
-chown "$(stat -c '%U:%G' "$APP_DIR")" "$APP_DIR/cronix" 2>/dev/null || chown root:root "$APP_DIR/cronix"
+chmod 755 "$APP_DIR/cronix"
 green "[OK] 二进制已更新"
 
 # 3. 重启服务

@@ -5,26 +5,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=cronix
-Group=cronix
+User=root
 WorkingDirectory=/opt/cronix
 ExecStart=/opt/cronix/cronix serve -c /opt/cronix/config.yaml
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5
-
-# 安全加固
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=/opt/cronix/data
-ReadOnlyPaths=/opt/cronix/config.yaml
-PrivateTmp=yes
-
-# 资源限制
-MemoryHigh=512M
-MemoryMax=1G
-CPUQuota=200%
 
 # 日志 → journald
 StandardOutput=journal

@@ -5,7 +5,6 @@
 set -e
 
 APP_DIR="/opt/cronix"
-SERVICE_USER="cronix"
 SERVICE_NAME="cronix"
 BIN_URL="https://github.com/riverisagame/cronix/releases/latest/download/cronix-linux-amd64"
 PORT=8080
@@ -50,22 +49,7 @@ if ss -tlnp | grep -q ":$PORT "; then
 fi
 
 # ============================================================
-# 1. 创建用户
-# ============================================================
-if id "$SERVICE_USER" &>/dev/null; then
-    # 用户已存在：验证是否为系统用户
-    USER_SHELL=$(getent passwd "$SERVICE_USER" | cut -d: -f7)
-    if [ "$USER_SHELL" != "/sbin/nologin" ] && [ "$USER_SHELL" != "/usr/sbin/nologin" ]; then
-        warn "[WARN] $SERVICE_USER 已存在但 shell=$USER_SHELL（建议设为 nologin）"
-    fi
-    green "[OK] 用户 $SERVICE_USER 已存在"
-else
-    useradd -r -s /sbin/nologin -d "$APP_DIR" -M "$SERVICE_USER"
-    green "[OK] 已创建系统用户 $SERVICE_USER"
-fi
-
-# ============================================================
-# 2. 停止旧服务（如果正在运行）
+# 1. 停止旧服务（如果正在运行）
 # ============================================================
 if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
     echo "[INFO] 停止旧服务..."
@@ -74,13 +58,13 @@ if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
 fi
 
 # ============================================================
-# 3. 创建目录
+# 2. 创建目录
 # ============================================================
 mkdir -p "$APP_DIR"/{data,deploy}
 green "[OK] 目录结构就绪: $APP_DIR/{data,deploy}"
 
 # ============================================================
-# 4. 部署二进制文件
+# 3. 部署二进制文件
 # ============================================================
 if [ -f "./cronix-linux" ]; then
     cp ./cronix-linux "$APP_DIR/cronix"
@@ -95,7 +79,7 @@ else
 fi
 
 # ============================================================
-# 5. 部署/保留配置文件
+# 4. 部署/保留配置文件
 # ============================================================
 if [ -f "$APP_DIR/config.yaml" ]; then
     # 备份旧配置
@@ -170,30 +154,25 @@ CFG_EOF
 fi
 
 # ============================================================
-# 6. 设置权限和属主
+# 5. 设置权限
 # ============================================================
-chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
-chmod 750  "$APP_DIR/cronix"       # 属主 rwx，同组 rx，其他人无
-chmod 600  "$APP_DIR/config.yaml"  # 含密码哈希，禁止他人读取
-chmod 755  "$APP_DIR" "$APP_DIR/data"
+chmod 755 "$APP_DIR/cronix"
+chmod 600 "$APP_DIR/config.yaml"
+chmod 755 "$APP_DIR" "$APP_DIR/data"
 green "[OK] 权限已设置"
 
 # ============================================================
-# 7. 以 cronix 用户身份验证
+# 6. 验证二进制可执行
 # ============================================================
-if su -s /bin/sh -c "test -x $APP_DIR/cronix" "$SERVICE_USER"; then
-    green "[OK] cronix 用户可执行二进制"
+if [ -x "$APP_DIR/cronix" ]; then
+    green "[OK] 二进制可执行"
 else
-    red "[FAIL] cronix 用户无法执行 $APP_DIR/cronix"
-    echo "  可能原因: 文件系统以 noexec 挂载"
-    MOUNT_POINT=$(df "$APP_DIR" | tail -1 | awk '{print $6}')
-    MOUNT_OPTS=$(mount | grep "on $MOUNT_POINT " | head -1)
-    echo "  挂载信息: $MOUNT_OPTS"
+    red "[FAIL] 无法执行 $APP_DIR/cronix"
     exit 1
 fi
 
 # ============================================================
-# 8. 安装 systemd 服务（内容自包含，支持 curl|bash）
+# 7. 安装 systemd 服务（内容自包含，支持 curl|bash）
 # ============================================================
 cat > /etc/systemd/system/cronix.service << 'SVC_EOF'
 [Unit]
@@ -203,26 +182,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=cronix
-Group=cronix
+User=root
 WorkingDirectory=/opt/cronix
 ExecStart=/opt/cronix/cronix serve -c /opt/cronix/config.yaml
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5
-
-# 安全加固
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=/opt/cronix/data
-ReadOnlyPaths=/opt/cronix/config.yaml
-PrivateTmp=yes
-
-# 资源限制
-MemoryHigh=512M
-MemoryMax=1G
-CPUQuota=200%
 
 # 日志 → journald
 StandardOutput=journal
@@ -236,7 +201,7 @@ systemctl daemon-reload
 green "[OK] systemd 服务已安装"
 
 # ============================================================
-# 9. 完成提示
+# 8. 完成提示
 # ============================================================
 echo ""
 echo "============================================"
@@ -244,7 +209,7 @@ echo " 安装完成！"
 echo "============================================"
 echo ""
 echo "1. 设置管理员密码:"
-echo "   sudo -u $SERVICE_USER $APP_DIR/cronix passwd -c $APP_DIR/config.yaml"
+echo "   $APP_DIR/cronix passwd -c $APP_DIR/config.yaml"
 echo ""
 echo "2. 启动服务:"
 echo "   sudo systemctl start $SERVICE_NAME"
@@ -262,8 +227,5 @@ echo "   纯 Nginx: 参考 deploy/nginx-cronix.conf"
 echo "   详见 README: https://github.com/riverisagame/cronix#deployment-linux-production"
 echo ""
 echo "6. (可选) 以其他用户执行任务（run_as 功能）:"
-echo "   如需指定 Shell 任务以特定用户身份运行，需配置 sudoers："
-echo "   echo '$SERVICE_USER ALL=(worker) NOPASSWD: /bin/sh' > /etc/sudoers.d/cronix"
-echo "   将 worker 替换为实际用户名，多个用户用逗号分隔"
-echo "   详见 README 中 run_as 文档"
+echo "   任务配置中设置 run_as 字段，cronix 以 root 运行可直接 sudo -u 切换用户"
 echo "============================================"
