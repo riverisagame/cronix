@@ -283,7 +283,7 @@ func runServe(cmd *cobra.Command, args []string) {
     authH := &handler.AuthHandler{} // 登录认证相关的请求处理
     taskH := &handler.TaskHandler{TaskSvc: taskSvc, ExecSvc: execSvc, Executor: exec} // 任务管理相关的请求处理
     logH := &handler.LogHandler{ExecSvc: execSvc} // 日志查看相关的请求处理
-    groupH := &handler.GroupHandler{GroupSvc: &service.GroupService{DB: database.DB}, TaskSvc: taskSvc, Executor: exec} // 任务组管理
+    groupH := &handler.GroupHandler{GroupSvc: &service.GroupService{DB: database.DB, Engine: engine}, TaskSvc: taskSvc, Executor: exec} // 任务组管理
 
     // --- 第10步：配置路由并启动 HTTP 服务器 ---
     // router.SetupRouter 创建一个 Gin 框架的路由引擎

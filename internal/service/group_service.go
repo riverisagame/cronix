@@ -4,12 +4,14 @@ import (
     "fmt"
 
     "cronix/internal/model"
+    "cronix/internal/scheduler"
 
     "gorm.io/gorm"
 )
 
 type GroupService struct {
-    DB *gorm.DB
+    DB     *gorm.DB
+    Engine *scheduler.Engine
 }
 
 func (s *GroupService) ListGroups() ([]model.TaskGroup, error) {
@@ -35,7 +37,11 @@ func (s *GroupService) CreateGroup(g *model.TaskGroup) error {
     if g.Mode != "parallel" && g.Mode != "sequential" {
         return fmt.Errorf("mode must be parallel or sequential")
     }
-    return s.DB.Create(g).Error
+    if err := s.DB.Create(g).Error; err != nil {
+        return err
+    }
+    if s.Engine != nil { s.Engine.ReloadAll() }
+    return nil
 }
 
 func (s *GroupService) UpdateGroup(id uint, updates map[string]interface{}) error {
@@ -44,13 +50,20 @@ func (s *GroupService) UpdateGroup(id uint, updates map[string]interface{}) erro
             return fmt.Errorf("mode must be parallel or sequential")
         }
     }
-    return s.DB.Model(&model.TaskGroup{}).Where("id = ?", id).Updates(updates).Error
+    if err := s.DB.Model(&model.TaskGroup{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+        return err
+    }
+    if s.Engine != nil { s.Engine.ReloadAll() }
+    return nil
 }
 
 func (s *GroupService) DeleteGroup(id uint) error {
-    // Unlink tasks from this group
     s.DB.Model(&model.Task{}).Where("group_id = ?", id).Update("group_id", nil)
-    return s.DB.Delete(&model.TaskGroup{}, id).Error
+    if err := s.DB.Delete(&model.TaskGroup{}, id).Error; err != nil {
+        return err
+    }
+    if s.Engine != nil { s.Engine.ReloadAll() }
+    return nil
 }
 
 // GetGroupMembers returns all tasks belonging to a group, ordered by sort_order.

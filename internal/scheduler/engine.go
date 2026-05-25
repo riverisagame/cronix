@@ -22,11 +22,13 @@ import (
 // Engine 是定时任务调度引擎
 // 它管理所有定时任务，在正确的时间触发任务执行
 type Engine struct {
-    cron      *cron.Cron             // robfig/cron实例：底层定时器，支持精确到秒的6字段Cron表达式
-    db        *gorm.DB               // 数据库连接：用来查询有哪些任务需要调度
-    triggerCh chan uint              // 触发通道：当定时器到点时，把任务ID放入这个缓冲通道
-    mu        sync.Mutex             // 互斥锁：保证重新加载任务列表时不被其他操作干扰
-    entryMap  map[uint]cron.EntryID  // 映射表：任务ID → Cron内部条目ID，用于删除或修改任务
+    cron           *cron.Cron             // robfig/cron实例：底层定时器，支持精确到秒的6字段Cron表达式
+    db             *gorm.DB               // 数据库连接：用来查询有哪些任务需要调度
+    triggerCh      chan uint              // 触发通道：当定时器到点时，把任务ID放入这个缓冲通道
+    mu             sync.Mutex             // 互斥锁：保证重新加载任务列表时不被其他操作干扰
+    entryMap       map[uint]cron.EntryID  // 映射表：任务ID → Cron内部条目ID，用于删除或修改任务
+    groupEntryMap  map[uint]cron.EntryID  // 映射表：组ID → Cron内部条目ID
+    groupTrigger   func(uint)             // 组触发回调：由executor设置，cron到点时调用
 }
 
 // NewEngine 创建一个新的调度引擎
@@ -34,10 +36,11 @@ type Engine struct {
 // 返回值：初始化好的Engine指针
 func NewEngine(db *gorm.DB) *Engine {
     return &Engine{
-        cron:      cron.New(cron.WithSeconds()), // 创建Cron实例，WithSeconds()表示支持秒级定时（6字段：秒 分 时 日 月 周）
-        db:        db,                            // 保存数据库连接
-        triggerCh: make(chan uint, 1024),         // 创建缓冲大小为1024的通道，可以暂存1024个待处理的任务触发
-        entryMap:  make(map[uint]cron.EntryID),   // 创建空的任务映射表
+        cron:          cron.New(cron.WithSeconds()), // 创建Cron实例，WithSeconds()表示支持秒级定时（6字段：秒 分 时 日 月 周）
+        db:            db,                            // 保存数据库连接
+        triggerCh:     make(chan uint, 1024),         // 创建缓冲大小为1024的通道，可以暂存1024个待处理的任务触发
+        entryMap:      make(map[uint]cron.EntryID),   // 创建空的任务映射表
+        groupEntryMap: make(map[uint]cron.EntryID),   // 创建空的组映射表
     }
 }
 
@@ -45,6 +48,11 @@ func NewEngine(db *gorm.DB) *Engine {
 // 返回只读通道是为了安全：外部只能读取，不能往里面写数据
 func (e *Engine) TriggerChan() <-chan uint {
     return e.triggerCh
+}
+
+// SetGroupTrigger sets the callback for group cron triggers.
+func (e *Engine) SetGroupTrigger(fn func(uint)) {
+    e.groupTrigger = fn
 }
 
 // Start 启动定时调度器
@@ -113,5 +121,33 @@ func (e *Engine) ReloadAll() error {
     } else {
         log.Info().Int("loaded", len(tasks)).Msg("所有任务加载成功")
     }
+
+    // 第五步：加载有 cron 表达式的任务组
+    for _, eid := range e.groupEntryMap {
+        e.cron.Remove(eid)
+    }
+    e.groupEntryMap = make(map[uint]cron.EntryID)
+    var groups []model.TaskGroup
+    if err := e.db.Where("enabled = ? AND cron_expr != ''", true).Find(&groups).Error; err == nil {
+        for _, g := range groups {
+            gid := g.ID
+            expr := g.CronExpr
+            if len(strings.Fields(expr)) == 5 {
+                expr = "0 " + expr
+            }
+            if e.groupTrigger != nil {
+                entryID, err := e.cron.AddFunc(expr, func() {
+                    e.groupTrigger(gid)
+                })
+                if err != nil {
+                    log.Warn().Err(err).Str("group", g.Name).Str("cron", g.CronExpr).Msg("跳过无效cron的组")
+                } else {
+                    e.groupEntryMap[gid] = entryID
+                }
+            }
+        }
+        log.Info().Int("groups", len(e.groupEntryMap)).Msg("任务组定时加载完成")
+    }
+
     return nil                                                   // 加载成功
 }

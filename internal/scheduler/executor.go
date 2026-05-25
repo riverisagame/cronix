@@ -43,7 +43,23 @@ func NewExecutor(db *gorm.DB, cfg *config.Config, engine *Engine) (*Executor, er
     if err != nil {
         return nil, fmt.Errorf("create ants pool: %w", err)    // %w 把原始错误包装起来，方便上层查看
     }
-    return &Executor{db: db, pool: pool, cfg: cfg, engine: engine}, nil
+    exec := &Executor{db: db, pool: pool, cfg: cfg, engine: engine}
+    // 注册组定时回调：cron到点后加载组成员并执行
+    engine.SetGroupTrigger(func(groupID uint) {
+        var g model.TaskGroup
+        if err := db.First(&g, groupID).Error; err != nil {
+            log.Error().Err(err).Uint("group_id", groupID).Msg("group trigger: group not found")
+            return
+        }
+        var members []model.Task
+        db.Where("group_id = ?", groupID).Order("sort_order ASC, id ASC").Find(&members)
+        if len(members) == 0 {
+            log.Warn().Str("group", g.Name).Msg("group trigger: group has no members")
+            return
+        }
+        exec.RunGroup(&g, members)
+    })
+    return exec, nil
 }
 
 // Run 是执行器的主循环，会一直运行直到收到取消信号
