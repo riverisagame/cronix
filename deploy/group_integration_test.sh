@@ -45,7 +45,7 @@ server:
     enabled: true
 auth:
   username: admin
-  password: ""
+  password: "$2a$04$mkAZ9juhyjibIhyzVUEvx.FN.56UC0e2Nuibmf1i3MAqvDv3jWT4K"
   jwt_secret: "test-secret-key-for-integration-testing"
 database:
   path: /tmp/cronix-test-data/cronix.db
@@ -65,9 +65,8 @@ circuit_breaker:
   cooldown_seconds: 10
 YAML
 
-# Set password
-printf "admin\npassword123\npassword123\n" | "$BIN" passwd -c "$CONFIG" 2>/dev/null
-green "[OK] Password set"
+echo ""
+green "[OK] Config written (password hash embedded)"
 
 # Start server
 "$BIN" serve -c "$CONFIG" &

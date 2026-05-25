@@ -189,6 +189,14 @@
           <el-switch v-model="form.enabled" />
         </el-form-item>
 
+        <!-- 任务依赖（此任务必须等所选任务成功后才能执行） -->
+        <el-form-item label="Depends On">
+          <el-select v-model="form.dep_ids" multiple placeholder="Select tasks this depends on..." style="width:100%">
+            <el-option v-for="t in availableDepTasks" :key="t.id" :label="t.name + ' (#' + t.id + ')'" :value="t.id" />
+          </el-select>
+          <div style="font-size:11px;color:#909399;margin-top:2px">所选任务必须先成功执行，此任务才会运行</div>
+        </el-form-item>
+
         <!-- 操作按钮 -->
         <el-form-item>
           <!--
@@ -250,8 +258,9 @@ const saving = ref(false)
  *   enabled: 是否启用，默认 true（启用）
  *   description: 任务描述（空）
  */
-const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'', group_id: null, timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
 const groupList = ref<any[]>([])
+const availableDepTasks = ref<any[]>([])
 
 // --- cronHint: 将 cron 表达式翻译为人话 ---
 const WEEKDAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
@@ -300,28 +309,22 @@ const cronHint = computed(() => {
 onMounted(async () => {
   // Load group list for the selector
   try { const r = await groupAPI.list(); groupList.value = r.data.data || [] } catch { /* ignore */ }
+  // Load all tasks for dependency selector
+  try { const r = await taskAPI.list({ page:1, page_size:200 }); availableDepTasks.value = r.data.data.items || [] } catch { /* ignore */ }
   // 如果不是新建模式（即编辑已有任务）
   if (!isNew.value) {
     try {
-      /**
-       * taskAPI.get(Number(route.params.id))
-       * Number() 把路由参数（字符串）转成数字类型
-       * 比如 route.params.id 是 "5"，Number("5") 变成 5
-       */
       const r = await taskAPI.get(Number(route.params.id))
-      /**
-       * 合并表单数据：
-       * { ...form.value, ...r.data.data }
-       * ... 是 JavaScript 的"展开运算符"（spread operator）。
-       * 它把对象里的所有属性"拆开"，然后合并成一个新对象。
-       * 后面对象的同名属性会覆盖前面的，所以后端返回的数据会覆盖表单的默认值。
-       * 这样做的目的是保留 form 里后端没有返回的字段（如默认值），
-       * 同时用后端的真实数据覆盖对应字段。
-       */
-      form.value = { ...form.value, ...r.data.data }
+      const d = r.data.data
+      form.value = { ...form.value, ...d }
+      // Load existing deps
+      try {
+        const dr = await taskAPI.getDeps(Number(route.params.id))
+        const deps = dr.data.data || []
+        form.value.dep_ids = deps.map((dep: any) => dep.depends_on_id || dep.id)
+      } catch { /* deps load failed, ignore */ }
     }
     catch {
-      // 加载失败：弹出错误提示，然后返回任务列表页
       ElMessage.error('Load failed')
       router.push('/tasks')
     }
@@ -342,13 +345,21 @@ async function save() {
   // 开始保存，按钮转圈
   saving.value = true
   try {
+    const { dep_ids, ...taskData } = form.value
     if (isNew.value) {
       // 新建模式：调用创建 API
-      await taskAPI.create(form.value)
+      const r = await taskAPI.create(taskData)
+      const newId = r.data.data.id
+      // Save dependencies if any
+      if (dep_ids && dep_ids.length > 0) {
+        await taskAPI.updateDeps(newId, dep_ids)
+      }
       ElMessage.success('Created')
     } else {
       // 编辑模式：把 :id 参数转成数字，调用更新 API
-      await taskAPI.update(Number(route.params.id), form.value)
+      await taskAPI.update(Number(route.params.id), taskData)
+      // Save dependencies
+      await taskAPI.updateDeps(Number(route.params.id), dep_ids || [])
       ElMessage.success('Saved')
     }
     // 保存成功，返回任务列表页
