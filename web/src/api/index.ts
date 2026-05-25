@@ -106,11 +106,11 @@ export const taskAPI = {
  * logAPI：执行日志相关的 API 调用函数。
  */
 export const logAPI = {
-  /**
-   * 获取全局执行日志列表（包含所有任务的日志）。
-   * @param params 查询参数（页码、筛选条件等）
-   */
-  list(params: any) { return api.get('/logs', { params }) }
+  list(params: any) { return api.get('/logs', { params }) },
+  // 清空所有日志
+  clearAll() { return api.delete('/logs') },
+  // 清空指定任务的日志
+  clearTask(id: number) { return api.delete('/tasks/' + id + '/logs') },
 }
 
 /**

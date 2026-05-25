@@ -70,6 +70,8 @@ func SetupRouter(
 
         // ---- 日志和仪表盘 ----
         api.GET("/logs", logH.GetAllLogs)                      // 获取所有日志
+        api.DELETE("/logs", logH.ClearAllLogs)                 // 清空所有日志
+        api.DELETE("/tasks/:id/logs", logH.ClearTaskLogs)     // 清空指定任务日志
         api.GET("/dashboard/stats", logH.GetDashboardStats)    // 仪表盘统计数据
         api.GET("/settings", logH.GetSettings)                 // 读取系统设置
         api.PUT("/settings", logH.UpdateSettings)              // 修改系统设置

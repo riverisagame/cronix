@@ -117,3 +117,15 @@ func (s *ExecutionService) CleanOldLogs(retentionDays int) error {
     cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour) // 计算截止时间
     return s.DB.Where("created_at < ?", cutoff).Delete(&model.ExecutionLog{}).Error // 删除早于截止时间的记录
 }
+
+// ClearAllLogs 清空所有执行日志
+func (s *ExecutionService) ClearAllLogs() (int64, error) {
+    result := s.DB.Where("1 = 1").Delete(&model.ExecutionLog{})
+    return result.RowsAffected, result.Error
+}
+
+// ClearTaskLogs 清空指定任务的执行日志
+func (s *ExecutionService) ClearTaskLogs(taskID uint) (int64, error) {
+    result := s.DB.Where("task_id = ?", taskID).Delete(&model.ExecutionLog{})
+    return result.RowsAffected, result.Error
+}

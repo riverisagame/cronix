@@ -9,7 +9,12 @@
 <template>
   <div>
     <!-- 页面标题 -->
-    <h2 style="margin-top:0">Execution Logs</h2>
+    <h2 style="margin-top:0;display:flex;align-items:center;gap:12px">
+      Execution Logs
+      <el-popconfirm title="Delete ALL execution logs?" @confirm="clearAllLogs">
+        <template #reference><el-button size="small" type="danger" :loading="clearing">Clear All</el-button></template>
+      </el-popconfirm>
+    </h2>
 
     <el-card shadow="hover">
       <!--
@@ -201,6 +206,7 @@ const page = ref(1)
 
 // 表格加载状态
 const loading = ref(false)
+const clearing = ref(false)
 
 /**
  * filters 使用 reactive() 创建（而不是 ref()）。
@@ -280,6 +286,17 @@ async function load() {
     // 关闭加载动画
     loading.value = false
   }
+}
+
+async function clearAllLogs() {
+  clearing.value = true
+  try {
+    const r = await logAPI.clearAll()
+    ElMessage.success(`Deleted ${r.data.data.deleted} log entries`)
+    load()
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.message || 'Failed')
+  } finally { clearing.value = false }
 }
 
 /**
