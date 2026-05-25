@@ -310,10 +310,10 @@ const cronHint = computed(() => {
 
   // 秒级
   if (hasSec && min === '*' && hour === '*' && day === '*' && month === '*' && wday === '*') {
-    segs.push(describeField(sec, '秒'))
+    segs.push(describeField(sec, '秒').replace(/^(\d+)$/, '每$1秒'))
     return segs.join(' ')
   }
-  if (hasSec) segs.push(describeField(sec, '秒'))
+  if (hasSec) segs.push('每分的' + describeField(sec, '秒').replace(/^(\d{1,2})$/, '第$1秒'))
 
   // 时分
   if (min === '*' && hour === '*') segs.push('每分钟')
@@ -408,7 +408,14 @@ function cronNext(expr: string, count: number = 5): string[] {
   // Detect sub-minute: iterate by seconds if seconds field is non-trivial
   const subMinute = secS !== '*' && secS !== '0'
   const results: Date[] = []
-  const start = new Date(); start.setMilliseconds(0)
+  // Start from next time slot to avoid matching the past
+  const start = new Date()
+  if (subMinute) {
+    start.setSeconds(start.getSeconds() + 1, 0) // next full second
+  } else {
+    start.setSeconds(start.getSeconds() + 60, start.getSeconds()) // next full minute
+  }
+  start.setMilliseconds(0)
   const stepMs = subMinute ? 1000 : 60000
   const maxIter = subMinute ? 86400 : 525600 // 1 day or 1 year
   for (let i = 0; i < maxIter && results.length < count; i++) {

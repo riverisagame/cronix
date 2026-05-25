@@ -146,9 +146,10 @@ const cronHint = computed(() => {
   const hasSec = sec !== '*' && sec !== '0'
 
   if (hasSec && min === '*' && hour === '*' && day === '*' && month === '*' && wday === '*') {
-    segs.push(describeField(sec, '秒'))
+    segs.push(describeField(sec, '秒').replace(/^(\d+)$/, '每$1秒'))
     return segs.join(' ')
   }
+  if (hasSec) segs.push('每分的' + describeField(sec, '秒').replace(/^(\d{1,2})$/, '第$1秒'))
   if (hasSec) segs.push(describeField(sec, '秒'))
 
   if (min === '*' && hour === '*') segs.push('每分钟')
@@ -213,7 +214,10 @@ function cronNext(expr: string, count: number = 5): string[] {
   const mons = parseCronField(monS, 1, 12); const wdays = parseCronField(wdayS, 0, 6)
   if ([secs,mins,hours,days,mons,wdays].some(a => a.length === 0)) return []
   const subMinute = secS !== '*' && secS !== '0'
-  const results: Date[] = []; const start = new Date(); start.setMilliseconds(0)
+  const results: Date[] = []; const start = new Date()
+  if (subMinute) { start.setSeconds(start.getSeconds() + 1, 0) }
+  else { start.setSeconds(start.getSeconds() + 60, start.getSeconds()) }
+  start.setMilliseconds(0)
   const stepMs = subMinute ? 1000 : 60000
   const maxIter = subMinute ? 86400 : 525600
   for (let i = 0; i < maxIter && results.length < count; i++) {
