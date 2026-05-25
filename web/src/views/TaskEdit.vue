@@ -55,9 +55,29 @@
           星号 * 表示"每一个"（每天、每月等）
         -->
         <el-form-item label="Cron Expression">
-          <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）" />
-          <div style="font-size:12px;color:#909399;margin-top:4px">
+          <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）"
+            @input="onCronInput" />
+          <!-- 快捷宏 -->
+          <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
+            <span v-for="m in cronMacros" :key="m.label"
+              style="cursor:pointer;font-size:11px;padding:1px 6px;border:1px solid #666;border-radius:3px;color:#aaa"
+              @click="applyMacro(m.value)" :title="m.label + ': ' + m.value">
+              {{ m.label }}
+            </span>
+          </div>
+          <!-- 字段高亮 -->
+          <div v-if="cronFields.length > 0" style="margin-top:6px;display:flex;gap:4px">
+            <span v-for="(f, i) in cronFields" :key="i"
+              :style="{background: cronFieldColors[i],color:'#fff',fontSize:'12px',padding:'2px 6px',borderRadius:'3px'}"
+              :title="cronFieldLabels[i]">{{ f }}</span>
+          </div>
+          <!-- 可读说明 + 下次执行 -->
+          <div :style="{fontSize:'12px',color: cronValid ? '#67C23A' : '#F56C6C',marginTop:'4px'}">
             {{ cronHint }}
+          </div>
+          <div v-if="cronNextRuns.length > 0" style="margin-top:4px;font-size:12px;color:#909399">
+            Next: <span v-for="(t, i) in cronNextRuns" :key="i"
+              style="margin-right:8px;background:#1d1e1f;padding:1px 6px;border-radius:3px">{{ t }}</span>
           </div>
         </el-form-item>
 
@@ -302,10 +322,108 @@ const cronHint = computed(() => {
   return segs.join(' ')
 })
 
-/**
- * onMounted：页面加载完成后执行。
- * 如果是编辑模式（isNew 为 false），从后端加载已有任务的数据填入表单。
- */
+// --- cronValid: 校验 cron 格式 ---
+const cronValid = computed(() => {
+  const expr = form.value.cron_expr?.trim()
+  if (!expr) return true
+  if (CRON_MACROS[expr]) return true
+  const parts = expr.split(/\s+/).filter(Boolean)
+  return parts.length >= 5 && parts.length <= 6 && /^[\d\*\/\-\,\s]+$/.test(expr)
+})
+
+// --- cron 快捷宏 ---
+const CRON_MACROS: Record<string,string> = {
+  '@yearly':  '0 0 0 1 1 *', '@annually': '0 0 0 1 1 *',
+  '@monthly': '0 0 0 1 * *', '@weekly': '0 0 0 * * 0',
+  '@daily':   '0 0 0 * * *', '@midnight': '0 0 0 * * *',
+  '@hourly':  '0 0 * * * *',
+}
+const cronMacros = [
+  { label:'@hourly', value:'@hourly' }, { label:'@daily', value:'@daily' },
+  { label:'@weekly', value:'@weekly' }, { label:'@monthly', value:'@monthly' },
+  { label:'@every 5m', value:'0 */5 * * * *' },
+  { label:'@every 30m', value:'0 */30 * * * *' },
+  { label:'@every 15m', value:'0 */15 * * * *' },
+]
+function applyMacro(val: string) { form.value.cron_expr = val }
+function onCronInput() { /* reactive update handles everything */ }
+
+// --- cron 字段高亮 ---
+const cronFieldLabels = ['秒','分','时','日','月','周']
+const cronFieldColors = ['#E6A23C','#67C23A','#409EFF','#F56C6C','#909399','#E6A23C']
+const cronFields = computed(() => {
+  let e = form.value.cron_expr?.trim() || ''
+  for (const [k, v] of Object.entries(CRON_MACROS)) { if (e === k) e = v }
+  const parts = e.split(/\s+/).filter(Boolean)
+  return parts.length >= 5 ? (parts.length === 6 ? parts : ['0', ...parts]) : []
+})
+
+// --- 下次执行时间计算（基础版，覆盖常用模式） ---
+function parseCronField(f: string, min: number, max: number): number[] {
+  f = f.trim()
+  if (f === '*') {
+    const r: number[] = []; for (let i = min; i <= max; i++) r.push(i); return r
+  }
+  if (f.startsWith('*/')) {
+    const step = parseInt(f.slice(2)) || 1
+    const r: number[] = []; for (let i = min; i <= max; i += step) r.push(i); return r
+  }
+  if (f.includes(',')) {
+    const r: number[] = []
+    f.split(',').forEach(p => { const v = parseInt(p); if (!isNaN(v) && v >= min && v <= max) r.push(v) })
+    return r.sort((a,b)=>a-b)
+  }
+  if (f.includes('-')) {
+    const [a,b] = f.split('-').map(Number); const r: number[] = []
+    if (!isNaN(a) && !isNaN(b)) for (let i = a; i <= b && i <= max; i++) if (i >= min) r.push(i)
+    return r
+  }
+  const v = parseInt(f); return !isNaN(v) && v >= min && v <= max ? [v] : []
+}
+
+function cronNext(expr: string, count: number = 5): string[] {
+  let e = expr.trim()
+  for (const [k, v] of Object.entries(CRON_MACROS)) { if (e === k) e = v }
+  const parts = e.split(/\s+/).filter(Boolean)
+  if (parts.length < 5) return []
+  const [secS, minS, hourS, dayS, monS, wdayS] = parts.length === 6 ? parts : ['0', ...parts]
+  const secs = parseCronField(secS, 0, 59)
+  const mins = parseCronField(minS, 0, 59)
+  const hours = parseCronField(hourS, 0, 23)
+  const days = parseCronField(dayS, 1, 31)
+  const mons = parseCronField(monS, 1, 12)
+  const wdays = parseCronField(wdayS, 0, 6)
+  if ([secs,mins,hours,days,mons,wdays].some(a => a.length === 0)) return []
+
+  const results: Date[] = []
+  const start = new Date(); start.setSeconds(start.getSeconds() + 60, 0)
+  const maxIter = 525600 // 1 year in minutes
+  for (let i = 0; i < maxIter && results.length < count; i++) {
+    const d = new Date(start.getTime() + i * 60000)
+    if (!mins.includes(d.getMinutes())) continue
+    if (!hours.includes(d.getHours())) continue
+    if (!mons.includes(d.getMonth() + 1)) continue
+    const dayMatch = days.includes(d.getDate())
+    const wdayMatch = wdays.includes(d.getDay())
+    if (dayS === '*' && wdayS !== '*') { if (!wdayMatch) continue }
+    else if (dayS !== '*' && wdayS === '*') { if (!dayMatch) continue }
+    else if (dayS !== '*' && wdayS !== '*') { if (!dayMatch && !wdayMatch) continue }
+    results.push(new Date(d))
+  }
+  return results.map(d => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  })
+}
+
+const cronNextRuns = computed(() => {
+  const expr = form.value.cron_expr?.trim()
+  return expr ? cronNext(expr, 5) : []
+})
+
+const depTaskOptions = computed(() => {
+  return availableDepTasks.value.filter((t: any) => t.id !== Number(route.params.id))
+})
 onMounted(async () => {
   // Load group list for the selector
   try { const r = await groupAPI.list(); groupList.value = r.data.data || [] } catch { /* ignore */ }
