@@ -39,21 +39,28 @@
     </el-card>
 
     <!-- Group execution logs drawer -->
-    <el-drawer v-model="drawerVisible" :title="'History: ' + logGroupName" size="600px" direction="rtl">
+    <el-drawer v-model="drawerVisible" :title="'History: ' + logGroupName" size="750px" direction="rtl">
       <div v-if="groupLogs.length===0" style="text-align:center;padding:40px;color:#909399">No executions yet</div>
       <el-timeline v-else>
         <el-timeline-item v-for="log in groupLogs" :key="log.id" :timestamp="log.start_time" placement="top"
           :color="log.status==='success'?'#67C23A':log.status==='failed'?'#F56C6C':log.status==='partial'?'#E6A23C':'#909399'">
           <el-card shadow="hover">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-              <el-tag :type="log.status==='success'?'success':log.status==='failed'?'danger':'warning'" size="small">{{ log.status }}</el-tag>
-              <el-tag size="small" type="info">{{ log.trigger_type }}</el-tag>
-              <span style="font-size:12px;color:#909399">OK:{{ log.success_count }} FAIL:{{ log.failed_count }}/{{ log.member_count }}</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <el-tag :type="log.status==='success'?'success':log.status==='failed'?'danger':'warning'" size="small">{{ log.status }}</el-tag>
+                <el-tag size="small" type="info">{{ log.trigger_type }}</el-tag>
+                <span style="font-size:12px;color:#909399">OK:{{ log.success_count }} FAIL:{{ log.failed_count }}/{{ log.member_count }}</span>
+              </div>
             </div>
             <div v-if="log.error_msg" style="font-size:12px;color:#F56C6C">{{ log.error_msg }}</div>
           </el-card>
         </el-timeline-item>
       </el-timeline>
+      <div style="margin-top:12px;text-align:center">
+        <el-popconfirm title="Clear all execution logs for this group?" @confirm="clearGroupLogs(logGroupId)">
+          <template #reference><el-button size="small" type="danger" :loading="clearingLogs">Clear Group Logs</el-button></template>
+        </el-popconfirm>
+      </div>
     </el-drawer>
   </div>
 </template>
@@ -61,7 +68,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { groupAPI } from '../api/index'
+import { groupAPI, logAPI } from '../api/index'
 import { Plus, Edit, VideoPlay, Delete, Tickets } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
@@ -71,7 +78,9 @@ const loading = ref(false)
 const runningId = ref<number|null>(null)
 const drawerVisible = ref(false)
 const logGroupName = ref('')
+const logGroupId = ref(0)
 const groupLogs = ref<any[]>([])
+const clearingLogs = ref(false)
 
 async function load() {
   loading.value = true
@@ -95,11 +104,20 @@ async function deleteGroup(id: number) {
 }
 
 async function showLogs(row: any) {
-  logGroupName.value = row.name; drawerVisible.value = true
+  logGroupName.value = row.name; logGroupId.value = row.id; drawerVisible.value = true
   try {
     const r = await groupAPI.getLogs(row.id, { page: 1, page_size: 50 })
     groupLogs.value = r.data.data.items || []
   } catch { groupLogs.value = [] }
+}
+
+async function clearGroupLogs(id: number) {
+  clearingLogs.value = true
+  try {
+    await logAPI.clearGroup(id)
+    ElMessage.success('Cleared'); groupLogs.value = []; load()
+  } catch(e: any) { ElMessage.error('Failed') }
+  finally { clearingLogs.value = false }
 }
 
 onMounted(load)

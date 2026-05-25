@@ -217,7 +217,7 @@
       size="700px" 抽屉宽度 700 像素
       direction="rtl" 从右侧滑出（Right To Left）
     -->
-    <el-drawer v-model="drawerVisible" :title="'History: '+logTaskName" size="700px" direction="rtl">
+    <el-drawer v-model="drawerVisible" :title="'History: '+logTaskName" size="750px" direction="rtl">
       <!--
         如果该任务的执行日志为空，显示提示信息
       -->

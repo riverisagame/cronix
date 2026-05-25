@@ -181,8 +181,8 @@ const CRON_MACROS: Record<string,string> = {
 const cronMacros = [
   { label:'@every 10s', value:'*/10 * * * * *' },
   { label:'@every 30s', value:'*/30 * * * * *' },
-  { label:'@hourly', value:'@hourly' }, { label:'@daily', value:'@daily' },
-  { label:'@weekly', value:'@weekly' }, { label:'@monthly', value:'@monthly' },
+  { label:'@hourly', value:'0 0 * * * *' }, { label:'@daily', value:'0 0 0 * * *' },
+  { label:'@weekly', value:'0 0 0 * * 0' }, { label:'@monthly', value:'0 0 0 1 * *' },
   { label:'@every 5m', value:'0 */5 * * * *' },
 ]
 const cronFieldLabels = ['秒','分','时','日','月','周']

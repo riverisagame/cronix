@@ -109,8 +109,12 @@ export const logAPI = {
   list(params: any) { return api.get('/logs', { params }) },
   // 清空所有日志
   clearAll() { return api.delete('/logs') },
+  // 删除单条日志
+  deleteLog(id: number) { return api.delete('/logs/' + id) },
   // 清空指定任务的日志
   clearTask(id: number) { return api.delete('/tasks/' + id + '/logs') },
+  // 清空组的日志
+  clearGroup(id: number) { return api.delete('/groups/' + id + '/logs') },
 }
 
 /**

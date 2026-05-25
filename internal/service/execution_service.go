@@ -129,3 +129,14 @@ func (s *ExecutionService) ClearTaskLogs(taskID uint) (int64, error) {
     result := s.DB.Where("task_id = ?", taskID).Delete(&model.ExecutionLog{})
     return result.RowsAffected, result.Error
 }
+
+// DeleteLog 删除单条执行日志
+func (s *ExecutionService) DeleteLog(id uint) error {
+    return s.DB.Delete(&model.ExecutionLog{}, id).Error
+}
+
+// ClearGroupLogs 清空指定组的执行日志
+func (s *ExecutionService) ClearGroupLogs(groupID uint) (int64, error) {
+    result := s.DB.Where("group_id = ?", groupID).Delete(&model.GroupExecutionLog{})
+    return result.RowsAffected, result.Error
+}

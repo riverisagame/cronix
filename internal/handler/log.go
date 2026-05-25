@@ -130,3 +130,24 @@ func (h *LogHandler) ClearTaskLogs(c *gin.Context) {
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"deleted": n}})
 }
+
+// DeleteLog deletes a single execution log entry.
+func (h *LogHandler) DeleteLog(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    if err := h.ExecSvc.DeleteLog(uint(id)); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+}
+
+// ClearGroupLogs deletes all execution logs for a group.
+func (h *LogHandler) ClearGroupLogs(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    n, err := h.ExecSvc.ClearGroupLogs(uint(id))
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"deleted": n}})
+}
