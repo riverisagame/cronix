@@ -68,8 +68,8 @@ YAML
 echo ""
 green "[OK] Config written (password hash embedded)"
 
-# Start server
-"$BIN" serve -c "$CONFIG" &
+# Start server (must run as root)
+sudo "$BIN" serve -c "$CONFIG" &
 SERVER_PID=$!
 
 # Wait for server
