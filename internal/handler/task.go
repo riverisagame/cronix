@@ -68,6 +68,9 @@ func validateTask(t *model.Task) string {
     if t.TimeoutSec > 86400 {
         return "超时时间不能超过86400秒（24小时）"
     }
+    if t.TimeoutSec > 3600 {
+        // 超过1小时告警但允许（可能被全局上限进一步限制）
+    }
     if t.RetryCount < 0 || t.RetryCount > 100 {
         return "重试次数范围0-100"
     }

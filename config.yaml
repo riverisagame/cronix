@@ -36,6 +36,7 @@ executor:
   pool_size: 32                  # 协程池大小（同时最多执行多少个任务）
   output_truncate_kb: 64         # 任务输出最大保留大小（KB），超出部分截断
   memory_limit_mb: 512           # 内存使用上限（MB）
+  max_timeout_sec: 3600          # 全局任务超时上限（秒），用户设置不能超过此值
 
 # --- 日志配置 ---
 log:

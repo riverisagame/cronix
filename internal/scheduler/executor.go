@@ -253,6 +253,13 @@ func (e *Executor) executeTask(taskID uint) {
     if maxRetries < 0 {                                          // 负数没有意义，视为0
         maxRetries = 0
     }
+
+    // 超时上限：取 min(任务设置, 全局上限)
+    timeout := task.TimeoutSec
+    if maxTO := e.cfg.Executor.MaxTimeoutSec; maxTO > 0 && timeout > maxTO {
+        timeout = maxTO
+        log.Warn().Str("task", task.Name).Int("requested", task.TimeoutSec).Int("capped", maxTO).Msg("任务超时超过全局上限，已限制")
+    }
     for attempt := 0; attempt <= maxRetries; attempt++ {         // 从第0次到第maxRetries次（最多maxRetries+1次尝试）
         if attempt > 0 {                                         // 如果这不是第一次尝试
             log.Info().Str("task", task.Name).Int("attempt", attempt).Int("max", maxRetries).Msg("retrying")
@@ -261,7 +268,7 @@ func (e *Executor) executeTask(taskID uint) {
         }
         execLog.Status = "running"                                // 重置状态
         execLog.ErrorMsg = ""                                     // 清空错误信息
-        e.runTaskByType(&task, &execLog)                          // 根据任务类型执行
+        e.runTaskByType(&task, &execLog, timeout)                     // 根据任务类型执行
         if execLog.Status == "success" {                          // 执行成功，不再重试
             break
         }
@@ -274,7 +281,7 @@ func (e *Executor) executeTask(taskID uint) {
 // runTaskByType 根据任务的类型（shell/http/cleanup/healthcheck）执行实际操作
 // 参数 task：任务对象
 // 参数 execLog：执行日志对象（会被修改）
-func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog) {
+func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog, timeoutSec int) {
     ctx := context.Background()                                  // 创建一个空的上下文
     now := time.Now()
     execLog.EndTime = &now                                       // 记录结束时间
@@ -283,7 +290,7 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog) 
     switch task.TaskType {                                       // 根据不同任务类型，走不同分支
     case "shell":
         // Shell任务：在操作系统命令行中执行一条命令
-        result := executor.ExecuteShell(ctx, task.Command, task.WorkDir, task.TimeoutSec, task.RunAs)
+        result := executor.ExecuteShell(ctx, task.Command, task.WorkDir, timeoutSec, task.RunAs)
         if result.Error != nil {
             execLog.Status = "failed"
             execLog.ErrorMsg = result.Error.Error()
@@ -297,7 +304,7 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog) 
         // HTTP任务：发送一个HTTP请求到指定URL
         result := executor.ExecuteHTTP(ctx, task.HTTPMethod, task.HTTPURL,
             task.HTTPHeaders, task.HTTPBody, task.HTTPAuthType, task.HTTPAuthConfig,
-            task.TimeoutSec, e.cfg.CircuitBreaker.FailureThreshold,
+            timeoutSec, e.cfg.CircuitBreaker.FailureThreshold,
             e.cfg.CircuitBreaker.CooldownSeconds)
         if result.Error != nil {
             execLog.Status = "failed"
@@ -327,7 +334,7 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog) 
 
     case "healthcheck":
         // 健康检查任务：访问一个URL，检查服务是否正常
-        result := executor.ExecuteHealthCheck(ctx, task.HTTPURL, task.TimeoutSec)
+        result := executor.ExecuteHealthCheck(ctx, task.HTTPURL, timeoutSec)
         if result.Error != nil {
             execLog.Status = "failed"
             execLog.ErrorMsg = result.Error.Error()

@@ -189,6 +189,10 @@ type ExecutorConfig struct {
     // MemoryLimitMB 单个任务的内存上限（MB）
     // 如果一个 shell 任务吃内存超过这个数，就强制终止它
     MemoryLimitMB int `mapstructure:"memory_limit_mb"`
+
+    // MaxTimeoutSec 全局任务超时上限（秒），用户设置值不能超过此值
+    // 默认 3600 秒（1小时），设为 0 则不限
+    MaxTimeoutSec int `mapstructure:"max_timeout_sec"`
 }
 
 // ============================================================
@@ -322,6 +326,7 @@ func Load(configPath string) (*Config, error) {
     v.SetDefault("server.graceful_timeout", "30s")              // 默认优雅退出等待 30 秒
     v.SetDefault("executor.pool_size", 32)                      // 默认最多同时执行 32 个任务
     v.SetDefault("executor.output_truncate_kb", 64)             // 默认输出截断到 64KB
+    v.SetDefault("executor.max_timeout_sec", 3600)              // 全局超时上限1小时
 
     // --- 第3步：读取配置文件 ---
     _ = v.ReadInConfig() // 文件不存在或损坏不阻塞启动，用默认值兜底
@@ -346,6 +351,9 @@ func Load(configPath string) (*Config, error) {
     }
     if cfg.Executor.OutputTruncateKB <= 0 {
         cfg.Executor.OutputTruncateKB = 64
+    }
+    if cfg.Executor.MaxTimeoutSec <= 0 {
+        cfg.Executor.MaxTimeoutSec = 3600
     }
     if cfg.Database.Path == "" {
         cfg.Database.Path = "./data/cronix.db"
