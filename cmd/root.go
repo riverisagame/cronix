@@ -80,6 +80,9 @@ var (
     // 默认值是 "config.yaml"（当前目录下的配置文件）
     configPath string
 
+    // Version 编译时通过 ldflags 注入的版本号，默认 "dev"
+    Version = "dev"
+
     // webDist 存储由 embed.go 打包进来的前端网页文件
     // embed.FS 是一个特殊的"虚拟文件夹"，里面装着编译时嵌入的所有静态文件
     // 这个变量在 embed.go 的 init() 函数中被赋值
@@ -101,10 +104,21 @@ var (
 支持四种任务类型：Shell命令、HTTP请求、清理任务、健康检查。
 提供 Web 网页管理界面和命令行管理工具两种操作方式。`,
 
+        // Version 显示编译时注入的版本号（通过 ldflags -X 设置）
+        Version: Version,
+
+        // PersistentPreRunE 在所有子命令执行前运行
+        // --version / --help 不需要 root 权限，cobra 内置处理会跳过此检查
+        PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+            euid := os.Geteuid()
+            if euid != 0 && euid != -1 { // -1 on Windows, skip check
+                return fmt.Errorf("cronix 必须以 root 用户运行")
+            }
+            return nil
+        },
+
         // Run 是当用户只输入 "cronix"（不带子命令）时执行的函数
         // 这里直接显示帮助信息，告诉用户有哪些子命令可以用
-        // cmd 是当前的命令对象，args 是用户输入的额外参数（这里用不到）
-        // _ = cmd.Help() 表示"调用 Help 函数，但我不需要它的返回值"
         Run: func(cmd *cobra.Command, args []string) {
             _ = cmd.Help() // 显示帮助信息
         },

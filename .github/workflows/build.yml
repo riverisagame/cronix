@@ -43,7 +43,8 @@ jobs:
           GOOS: linux
           GOARCH: amd64
         run: |
-          go build -ldflags="-s -w" -o cronix-linux-amd64 .
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          go build -ldflags="-s -w -X cronix/cmd.Version=${VERSION}" -o cronix-linux-amd64 .
           echo "=== Binary info ==="
           ls -lh cronix-linux-amd64
           file cronix-linux-amd64 || true
