@@ -21,6 +21,9 @@
         </el-form-item>
         <el-form-item label="Cron (optional)">
           <el-input v-model="form.cron_expr" placeholder="0 30 8 * * * — leave empty for manual only" />
+          <div :style="{fontSize:'12px',color: cronValid ? '#67C23A' : '#F56C6C',marginTop:'4px'}">
+            {{ cronHint }}
+          </div>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="save">{{ isNew ? 'Create' : 'Save' }}</el-button>
@@ -94,6 +97,44 @@ const savingMembers = ref(false)
 const taskSearch = ref('')
 
 const form = ref<any>({ name: '', description: '', mode: 'parallel', cron_expr: '' })
+
+// --- cron hint: human-readable explanation + validation ---
+function describeField(val: string, unit: string): string {
+  if (!val || val === '*') return ''
+  if (val.startsWith('*/')) return `每${val.slice(2)}${unit}`
+  if (val.includes(',')) return val.split(',').map(v => describeField(v, '')).join('、')
+  if (val.includes('-')) { const [a, b] = val.split('-'); return `${a}-${b}${unit}` }
+  return `${val}${unit}`
+}
+
+const cronHint = computed(() => {
+  const expr = form.value.cron_expr?.trim()
+  if (!expr) return '未设置 cron — 仅支持手动触发或由上游依赖触发'
+  const parts = expr.split(/\s+/).filter(Boolean)
+  if (parts.length < 5 || parts.length > 6) return '格式错误：需5或6个字段（秒 分 时 日 月 周）'
+  const OK = /^[\d\*\/\-\,\s]+$/.test(expr)
+  if (!OK) return '格式错误：只能包含数字、* / - , 和空格'
+  const [, min, hour, day, month, wday] = parts.length === 6 ? parts : ['0', ...parts]
+  const segs: string[] = []
+  if (min === '*' && hour === '*') segs.push('每分钟')
+  else if (hour === '*' && min !== '*') segs.push(`每小时第${min}分`)
+  else if (min === '0' && hour !== '*') segs.push(`${hour.padStart(2,'0')}:00`)
+  else segs.push(`${hour.padStart(2,'0')}:${min.padStart(2,'0')}`)
+  if (day !== '*' && wday === '*') segs.push(describeField(day, '号'))
+  else if (day === '*' && wday !== '*') segs.push('每' + describeField(wday, '').replace(/^(\d)$/, '周$1').replace(/^0$/, '日'))
+  else if (day === '*' && wday === '*') segs.push('每天')
+  if (month !== '*') segs.push(describeField(month, '月'))
+  return segs.join(' ')
+})
+
+const cronValid = computed(() => {
+  const expr = form.value.cron_expr?.trim()
+  if (!expr) return true // empty is valid (manual only)
+  const parts = expr.split(/\s+/).filter(Boolean)
+  if (parts.length < 5 || parts.length > 6) return false
+  return /^[\d\*\/\-\,\s]+$/.test(expr)
+})
+
 const members = ref<any[]>([])
 const allTasks = ref<any[]>([])
 
