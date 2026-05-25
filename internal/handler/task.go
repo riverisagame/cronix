@@ -6,7 +6,9 @@ package handler
 
 import (
     "net/http"     // 网络请求：HTTP状态码定义
+    "regexp"       // 正则表达式：输入校验
     "strconv"      // 字符串和数字互转：把URL参数中的字符串转成整数
+    "strings"      // 字符串处理：字段拆分
 
     "cronix/internal/model"     // 本项目的数据模型：任务结构体定义
     "cronix/internal/scheduler"  // 本项目的调度器：定时任务执行引擎
@@ -21,6 +23,59 @@ type TaskHandler struct {
     TaskSvc   *service.TaskService     // 任务服务：处理任务的增删改查业务逻辑
     ExecSvc   *service.ExecutionService // 执行日志服务：查询任务的运行记录
     Executor  *scheduler.Executor      // 执行器：手动触发任务时用到的底层引擎
+}
+
+// validateTask 校验任务输入，返回错误信息或空串
+func validateTask(t *model.Task, isCreate bool) string {
+    t.Name = strings.TrimSpace(t.Name)
+    if t.Name == "" {
+        return "任务名称不能为空"
+    }
+    if len(t.Name) > 128 {
+        return "任务名称不能超过128个字符"
+    }
+
+    t.CronExpr = strings.TrimSpace(t.CronExpr)
+    if isCreate && t.CronExpr == "" {
+        return "cron表达式不能为空"
+    }
+    if t.CronExpr != "" {
+        if ok, _ := regexp.MatchString(`^[\d\*\/\-\,\s]{9,64}$`, t.CronExpr); !ok {
+            return "cron表达式格式无效"
+        }
+        fields := strings.Fields(t.CronExpr)
+        if len(fields) < 5 || len(fields) > 6 {
+            return "cron表达式需要5或6个字段（如: 0 30 * * * 或 0 0 30 * * *）"
+        }
+    }
+
+    t.TaskType = strings.TrimSpace(t.TaskType)
+    switch t.TaskType {
+    case "shell", "http", "cleanup", "healthcheck":
+    case "":
+        t.TaskType = "shell"
+    default:
+        return "不支持的任务类型: " + t.TaskType + "（支持: shell, http, cleanup, healthcheck）"
+    }
+
+    if t.TaskType == "http" || t.TaskType == "healthcheck" {
+        t.HTTPURL = strings.TrimSpace(t.HTTPURL)
+        if t.HTTPURL == "" {
+            return "HTTP/Healthcheck 类型必须提供URL"
+        }
+    }
+
+    if t.TimeoutSec < 1 {
+        t.TimeoutSec = 300
+    }
+    if t.TimeoutSec > 86400 {
+        return "超时时间不能超过86400秒（24小时）"
+    }
+    if t.RetryCount < 0 || t.RetryCount > 100 {
+        return "重试次数范围0-100"
+    }
+
+    return ""
 }
 
 // ListTasks 获取任务列表（支持分页和搜索）
@@ -65,6 +120,10 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "cron expression is required"})
         return
     }
+    if msg := validateTask(&task, true); msg != "" {             // 输入校验
+        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": msg})
+        return
+    }
     if err := h.TaskSvc.CreateTask(&task); err != nil {          // 调用服务层保存任务到数据库
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()}) // 保存失败（比如名字重复）
         return
@@ -98,6 +157,38 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
     if err := c.ShouldBindJSON(&updates); err != nil {           // 把请求JSON绑定到映射表
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
         return
+    }
+    // 输入校验：验证每个可能更新的字段
+    if name, ok := updates["name"].(string); ok {
+        name = strings.TrimSpace(name)
+        if name == "" {
+            c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "任务名称不能为空"})
+            return
+        }
+        updates["name"] = name
+    }
+    if expr, ok := updates["cron_expr"].(string); ok {
+        expr = strings.TrimSpace(expr)
+        if expr != "" {
+            if ok, _ := regexp.MatchString(`^[\d\*\/\-\,\s]{9,64}$`, expr); !ok {
+                c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "cron表达式格式无效"})
+                return
+            }
+            fields := strings.Fields(expr)
+            if len(fields) < 5 || len(fields) > 6 {
+                c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "cron表达式需要5或6个字段"})
+                return
+            }
+        }
+        updates["cron_expr"] = expr
+    }
+    if taskType, ok := updates["task_type"].(string); ok {
+        switch taskType {
+        case "shell", "http", "cleanup", "healthcheck":
+        default:
+            c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "不支持的任务类型: " + taskType})
+            return
+        }
     }
     if err := h.TaskSvc.UpdateTask(uint(id), updates); err != nil { // 调用服务层更新任务
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
