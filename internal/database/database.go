@@ -39,6 +39,7 @@ import (
     // 这样在任何操作系统上都能直接编译，不挑环境
     // 而且编译出来的程序体积更小、部署更简单
     "github.com/glebarez/sqlite"
+    "github.com/rs/zerolog/log"
 
     // GORM 是一个"对象关系映射"（Object-Relational Mapping, ORM）库
     // 它的作用是把 Go 的结构体自动翻译成数据库表
@@ -110,7 +111,15 @@ func Init(dbPath string) error {
         return fmt.Errorf("打开数据库失败: %w", err)
     }
 
-    // --- 第3步：配置数据库连接池 ---
+    // --- 第3步：检查数据库完整性 ---
+    var integrityResult string
+    if err := db.Raw("PRAGMA integrity_check").Scan(&integrityResult).Error; err != nil {
+        log.Warn().Err(err).Msg("数据库完整性检查执行失败")
+    } else if integrityResult != "ok" {
+        log.Warn().Str("result", integrityResult).Msg("数据库可能损坏，请备份后重建")
+    }
+
+    // --- 第4步：配置数据库连接池 ---
 
     // db.DB() 方法从 GORM 的包装中取出底层的 *sql.DB 对象
     // GORM 是高级封装，*sql.DB 是 Go 标准库的底层数据库连接

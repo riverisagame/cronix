@@ -324,46 +324,74 @@ func Load(configPath string) (*Config, error) {
     v.SetDefault("executor.output_truncate_kb", 64)             // 默认输出截断到 64KB
 
     // --- 第3步：读取配置文件 ---
-    // v.ReadInConfig() 打开文件并解析内容
-    if err := v.ReadInConfig(); err != nil {
-        // 读取失败（比如文件不存在、语法错误）则返回错误
-        // %w 是 Go 1.13 引入的错误包装符号，保留原始错误信息
-        return nil, fmt.Errorf("读取配置文件失败: %w", err)
-    }
+    _ = v.ReadInConfig() // 文件不存在或损坏不阻塞启动，用默认值兜底
 
     // --- 第4步：把原始数据"翻译"成 Go 的结构体 ---
     var cfg Config
-    // v.Unmarshal 把 YAML 的键值对映射到 Config 结构体的字段上
-    // 根据 mapstructure 标签找到对应关系
-    if err := v.Unmarshal(&cfg); err != nil {
-        return nil, fmt.Errorf("解析配置文件失败: %w", err)
+    // 文件损坏可能导致 Unmarshal 失败，不阻塞
+    _ = v.Unmarshal(&cfg)
+
+    // --- 第4.5步：填充关键字段的兜底默认值 ---
+    if cfg.Server.Port <= 0 || cfg.Server.Port > 65535 {
+        cfg.Server.Port = 8080
+    }
+    if cfg.Server.Host == "" {
+        cfg.Server.Host = "0.0.0.0"
+    }
+    if cfg.Server.GracefulTimeout <= 0 {
+        cfg.Server.GracefulTimeout = 30 * time.Second
+    }
+    if cfg.Executor.PoolSize <= 0 || cfg.Executor.PoolSize > 4096 {
+        cfg.Executor.PoolSize = 32
+    }
+    if cfg.Executor.OutputTruncateKB <= 0 {
+        cfg.Executor.OutputTruncateKB = 64
+    }
+    if cfg.Database.Path == "" {
+        cfg.Database.Path = "./data/cronix.db"
+    }
+    if cfg.Log.RetentionDays <= 0 {
+        cfg.Log.RetentionDays = 30
+    }
+    if cfg.Log.MaxRecords <= 0 {
+        cfg.Log.MaxRecords = 100000
+    }
+    if cfg.CircuitBreaker.FailureThreshold <= 0 {
+        cfg.CircuitBreaker.FailureThreshold = 5
+    }
+    if cfg.CircuitBreaker.CooldownSeconds <= 0 {
+        cfg.CircuitBreaker.CooldownSeconds = 60
+    }
+    if cfg.Notify.Retry < 0 {
+        cfg.Notify.Retry = 3
+    }
+    if cfg.Notify.RetryInterval <= 0 {
+        cfg.Notify.RetryInterval = 5 * time.Second
+    }
+    if cfg.Server.API.Enabled == false && cfg.Server.WebUI.Enabled == false {
+        // 如果都没配，默认全开
+        cfg.Server.WebUI.Enabled = true
+        cfg.Server.API.Enabled = true
+    }
+    if cfg.Auth.Username == "" {
+        cfg.Auth.Username = "admin"
     }
 
     // --- 第5步：如果没有 JWT 密钥，自动生成一个 ---
-    // JWT 密钥必须存在，否则无法签发登录令牌
     if cfg.Auth.JWTSecret == "" {
-        // 生成一个安全的随机密钥
         secret, err := GenerateJWTSecret()
         if err != nil {
-            return nil, fmt.Errorf("生成 JWT 密钥失败: %w", err)
+            // JWT 密钥生成失败不致命，用回退方案
+            cfg.Auth.JWTSecret = "auto-generated-fallback-key-change-me"
+        } else {
+            cfg.Auth.JWTSecret = secret
         }
-        // 把生成的密钥存到配置里
-        cfg.Auth.JWTSecret = secret
-        // 同时也写回到 viper 对象里
-        v.Set("auth.jwt_secret", secret)
-        // 保存回配置文件（下次启动就不用再生成了）
-        if err := v.WriteConfig(); err != nil {
-            return nil, fmt.Errorf("保存 JWT 密钥到配置文件失败: %w", err)
-        }
+        v.Set("auth.jwt_secret", cfg.Auth.JWTSecret)
+        // 保存回配置文件（下次启动就不用再生成了），失败不阻塞
+        _ = v.WriteConfig()
     }
 
-    // --- 第6步：检查配置值的合理性 ---
-    // 比如端口号不能是负数、工人池不能超过 4096 等
-    if err := cfg.Validate(); err != nil {
-        return nil, err
-    }
-
-    // --- 第7步：开启配置文件变化监听 ---
+    // --- 第6步：开启配置文件变化监听 ---
     // v.WatchConfig() 让 viper 监听配置文件的变化
     // 你在外面用记事本改了 config.yaml，程序能立刻感知到
     v.WatchConfig()

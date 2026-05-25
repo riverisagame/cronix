@@ -58,6 +58,8 @@ import (
     // cobra 是最流行的 Go 命令行框架
     // 能自动生成帮助信息、解析参数、管理子命令
     "github.com/spf13/cobra"
+    // bcrypt 是密码哈希库，用于自动生成临时管理员密码
+    "golang.org/x/crypto/bcrypt"
 )
 
 // Execute 是暴露给 main.go 的唯一入口函数
@@ -213,11 +215,15 @@ func runServe(cmd *cobra.Command, args []string) {
     // .Int("port", cfg.Server.Port) 在日志里附加一个整数：端口号
     log.Info().Int("port", cfg.Server.Port).Msg("配置文件加载成功")
 
-    // --- 第3步：检查管理员密码是否已设置 ---
-    // 为了保证安全，启动服务器前必须有一个管理员密码
-    // 如果密码还没设置，提示用户先用 "cronix passwd" 命令设置密码
+    // --- 第3步：检查管理员密码 — 未设置时自动生成临时密码 ---
     if cfg.Auth.Password == "" {
-        log.Fatal().Msg("管理员密码未设置 - 请先执行 'cronix passwd' 命令来设置密码，然后再启动服务器")
+        tmpPass, _ := config.GenerateJWTSecret()
+        if len(tmpPass) > 12 {
+            tmpPass = tmpPass[:12]
+        }
+        hash, _ := bcrypt.GenerateFromPassword([]byte(tmpPass), bcrypt.DefaultCost)
+        cfg.Auth.Password = string(hash)
+        log.Warn().Str("temporary_password", tmpPass).Msg("管理员密码未设置，已自动生成临时密码，请尽快用 'cronix passwd' 修改")
     }
 
     // --- 第4步：初始化数据库 ---
