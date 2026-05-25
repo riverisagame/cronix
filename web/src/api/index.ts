@@ -150,5 +150,6 @@ export const groupAPI = {
   update(id: number, data: any) { return api.put('/groups/' + id, data) },
   delete(id: number) { return api.delete('/groups/' + id) },
   setMembers(id: number, taskIDs: number[]) { return api.put('/groups/' + id + '/members', { task_ids: taskIDs }) },
-  run(id: number) { return api.post('/groups/' + id + '/run') }
+  run(id: number) { return api.post('/groups/' + id + '/run') },
+  getLogs(id: number, params?: any) { return api.get('/groups/' + id + '/logs', { params }) },
 }

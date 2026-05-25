@@ -57,7 +57,7 @@ func NewExecutor(db *gorm.DB, cfg *config.Config, engine *Engine) (*Executor, er
             log.Warn().Str("group", g.Name).Msg("group trigger: group has no members")
             return
         }
-        exec.RunGroup(&g, members)
+        exec.RunGroup(&g, members, "cron")
     })
     return exec, nil
 }
@@ -403,13 +403,26 @@ func (e *Executor) Shutdown() {
 }
 
 // RunGroup executes all tasks in a group according to the group's mode.
-// parallel: all tasks are submitted to the pool concurrently.
-// sequential: tasks run one by one in DB order; stops on first failure.
-func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task) {
+func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerType string) {
+    now := time.Now()
+    glog := model.GroupExecutionLog{
+        GroupID:     g.ID,
+        GroupName:   g.Name,
+        Mode:        g.Mode,
+        TriggerType: triggerType,
+        MemberCount: len(members),
+        Status:      "running",
+        StartTime:   now,
+    }
+    e.db.Create(&glog)
     log.Info().Str("group", g.Name).Str("mode", g.Mode).Int("members", len(members)).Msg("running group")
+
+    var success, failed int
+    var errMsg string
 
     switch g.Mode {
     case "parallel":
+        var mu sync.Mutex
         var wg sync.WaitGroup
         for _, t := range members {
             wg.Add(1)
@@ -422,6 +435,11 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task) {
                     }
                 }()
                 e.executeTask(task.ID)
+                var lastLog model.ExecutionLog
+                e.db.Where("task_id = ?", task.ID).Order("id DESC").First(&lastLog)
+                mu.Lock()
+                if lastLog.Status == "success" { success++ } else { failed++ }
+                mu.Unlock()
             })
         }
         wg.Wait()
@@ -430,9 +448,9 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task) {
     case "sequential":
         for _, t := range members {
             e.executeTask(t.ID)
-            // Check if the task failed
             var lastLog model.ExecutionLog
             e.db.Where("task_id = ?", t.ID).Order("id DESC").First(&lastLog)
+            if lastLog.Status == "success" { success++ } else { failed++; errMsg = lastLog.ErrorMsg }
             if lastLog.Status == "failed" {
                 log.Warn().Str("group", g.Name).Str("task", t.Name).Msg("group (sequential) stopped due to failure")
                 break
@@ -440,4 +458,19 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task) {
         }
         log.Info().Str("group", g.Name).Msg("group (sequential) completed")
     }
+
+    // Update group execution log
+    endTime := time.Now()
+    glog.EndTime = &endTime
+    glog.SuccessCount = success
+    glog.FailedCount = failed
+    glog.ErrorMsg = errMsg
+    if failed > 0 && success > 0 {
+        glog.Status = "partial"
+    } else if failed == len(members) && len(members) > 0 {
+        glog.Status = "failed"
+    } else {
+        glog.Status = "success"
+    }
+    e.db.Save(&glog)
 }

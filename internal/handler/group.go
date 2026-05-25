@@ -107,6 +107,18 @@ func (h *GroupHandler) RunGroup(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "group has no members"})
         return
     }
-    go h.Executor.RunGroup(g, members)
+    go h.Executor.RunGroup(g, members, "manual")
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "group triggered", "data": gin.H{"mode": g.Mode, "member_count": len(members)}})
+}
+
+func (h *GroupHandler) GetGroupLogs(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+    pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+    logs, total, err := h.GroupSvc.GetGroupLogs(uint(id), page, pageSize)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"items": logs, "total": total}})
 }

@@ -25,10 +25,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="Description" show-overflow-tooltip min-width="140" />
-        <el-table-column label="Actions" width="200" fixed="right">
+        <el-table-column label="Actions" width="240" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click="router.push('/groups/'+row.id)" circle><el-icon><Edit /></el-icon></el-button>
             <el-button size="small" type="success" @click="runGroup(row)" :loading="runningId===row.id" circle><el-icon><VideoPlay /></el-icon></el-button>
+            <el-button size="small" @click="showLogs(row)" circle><el-icon><Tickets /></el-icon></el-button>
             <el-popconfirm title="Delete this group?" @confirm="deleteGroup(row.id)">
               <template #reference><el-button size="small" type="danger" circle><el-icon><Delete /></el-icon></el-button></template>
             </el-popconfirm>
@@ -36,6 +37,24 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- Group execution logs drawer -->
+    <el-drawer v-model="drawerVisible" :title="'History: ' + logGroupName" size="600px" direction="rtl">
+      <div v-if="groupLogs.length===0" style="text-align:center;padding:40px;color:#909399">No executions yet</div>
+      <el-timeline v-else>
+        <el-timeline-item v-for="log in groupLogs" :key="log.id" :timestamp="log.start_time" placement="top"
+          :color="log.status==='success'?'#67C23A':log.status==='failed'?'#F56C6C':log.status==='partial'?'#E6A23C':'#909399'">
+          <el-card shadow="hover">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <el-tag :type="log.status==='success'?'success':log.status==='failed'?'danger':'warning'" size="small">{{ log.status }}</el-tag>
+              <el-tag size="small" type="info">{{ log.trigger_type }}</el-tag>
+              <span style="font-size:12px;color:#909399">OK:{{ log.success_count }} FAIL:{{ log.failed_count }}/{{ log.member_count }}</span>
+            </div>
+            <div v-if="log.error_msg" style="font-size:12px;color:#F56C6C">{{ log.error_msg }}</div>
+          </el-card>
+        </el-timeline-item>
+      </el-timeline>
+    </el-drawer>
   </div>
 </template>
 
@@ -43,13 +62,16 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { groupAPI } from '../api/index'
-import { Plus, Edit, VideoPlay, Delete } from '@element-plus/icons-vue'
+import { Plus, Edit, VideoPlay, Delete, Tickets } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const groups = ref<any[]>([])
 const loading = ref(false)
 const runningId = ref<number|null>(null)
+const drawerVisible = ref(false)
+const logGroupName = ref('')
+const groupLogs = ref<any[]>([])
 
 async function load() {
   loading.value = true
@@ -70,6 +92,14 @@ async function deleteGroup(id: number) {
   await groupAPI.delete(id)
   ElMessage.success('Deleted')
   load()
+}
+
+async function showLogs(row: any) {
+  logGroupName.value = row.name; drawerVisible.value = true
+  try {
+    const r = await groupAPI.getLogs(row.id, { page: 1, page_size: 50 })
+    groupLogs.value = r.data.data.items || []
+  } catch { groupLogs.value = [] }
 }
 
 onMounted(load)

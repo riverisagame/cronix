@@ -84,6 +84,7 @@ func SetupRouter(
         api.DELETE("/groups/:id", groupH.DeleteGroup)          // 删除组
         api.PUT("/groups/:id/members", groupH.SetMembers)      // 设置组成员
         api.POST("/groups/:id/run", groupH.RunGroup)           // 手动触发整组
+        api.GET("/groups/:id/logs", groupH.GetGroupLogs)       // 查询组执行日志
     }
 
     // ========== 前端网页托管（如果开启了WebUI功能） ==========

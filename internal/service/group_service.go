@@ -95,3 +95,16 @@ func (s *GroupService) SetGroupMembers(groupID uint, taskIDs []uint) error {
         return nil
     })
 }
+
+// GetGroupLogs returns execution logs for a group, paginated.
+func (s *GroupService) GetGroupLogs(groupID uint, page, pageSize int) ([]model.GroupExecutionLog, int64, error) {
+    var logs []model.GroupExecutionLog
+    var total int64
+    query := s.DB.Model(&model.GroupExecutionLog{}).Where("group_id = ?", groupID)
+    query.Count(&total)
+    offset := (page - 1) * pageSize
+    if err := query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&logs).Error; err != nil {
+        return nil, 0, err
+    }
+    return logs, total, nil
+}
