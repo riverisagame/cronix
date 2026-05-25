@@ -26,7 +26,7 @@ type TaskHandler struct {
 }
 
 // validateTask 校验任务输入，返回错误信息或空串
-func validateTask(t *model.Task, isCreate bool) string {
+func validateTask(t *model.Task) string {
     t.Name = strings.TrimSpace(t.Name)
     if t.Name == "" {
         return "任务名称不能为空"
@@ -36,9 +36,6 @@ func validateTask(t *model.Task, isCreate bool) string {
     }
 
     t.CronExpr = strings.TrimSpace(t.CronExpr)
-    if isCreate && t.CronExpr == "" {
-        return "cron表达式不能为空"
-    }
     if t.CronExpr != "" {
         if ok, _ := regexp.MatchString(`^[\d\*\/\-\,\s]{9,64}$`, t.CronExpr); !ok {
             return "cron表达式格式无效"
@@ -116,11 +113,11 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "task name is required"})
         return
     }
-    if task.CronExpr == "" {                                     // Cron表达式是必填项，决定任务的执行时间
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "cron expression is required"})
-        return
+    if task.TaskType == "" {                                     // 任务类型默认 shell
+        task.TaskType = "shell"
     }
-    if msg := validateTask(&task, true); msg != "" {             // 输入校验
+    // cron 不再强求：无 cron 的任务靠 group 触发或手动执行
+    if msg := validateTask(&task); msg != "" {             // 输入校验
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": msg})
         return
     }

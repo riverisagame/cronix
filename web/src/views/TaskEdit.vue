@@ -54,8 +54,8 @@
           例如 "0 30 8 * * *" 表示每天上午 8:30 执行
           星号 * 表示"每一个"（每天、每月等）
         -->
-        <el-form-item label="Cron Expression" required>
-          <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *" />
+        <el-form-item label="Cron Expression">
+          <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）" />
           <div style="font-size:12px;color:#909399;margin-top:4px">
             {{ cronHint }}
           </div>

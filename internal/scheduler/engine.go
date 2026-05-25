@@ -82,6 +82,14 @@ func (e *Engine) ReloadAll() error {
     var skipped int                                             // 跳过的无效任务计数
     for _, task := range tasks {                                // 遍历所有查询到的任务
         taskID := task.ID                                       // 保存任务ID（闭包用，避免循环变量问题）
+        // 没有 cron 表达式的任务不注册定时器（由 group 触发或手动执行）
+        if task.CronExpr == "" {
+            continue
+        }
+        // 有 group 的任务不单独注册，由 group cron 统一触发
+        if task.GroupID != nil {
+            continue
+        }
         expr := task.CronExpr                                   // 获取原始cron表达式
         // 兼容5字段cron：缺少秒位则自动补充 "0 " 前缀
         if len(strings.Fields(expr)) == 5 {
