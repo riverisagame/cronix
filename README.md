@@ -150,7 +150,28 @@ sudo journalctl -u cronix -f          # 实时日志
 sudo systemctl restart cronix         # 重启
 ```
 
-配合 Nginx TLS（需要先申请证书）：
+配合反向代理 + TLS（二选一）：
+
+**选项 A: 宝塔面板（推荐新手）**
+
+1. **创建网站** → 左侧「网站」→「添加站点」，域名填 `cronix.example.com`，PHP 选「纯静态」
+2. **反向代理** → 网站设置 →「反向代理」→「添加反向代理」:
+   ```
+   代理名称: cronix
+   目标URL:  http://127.0.0.1:8080
+   发送域名: $host
+   ```
+3. **SSL 证书** → 网站设置 →「SSL」→「Let's Encrypt」→ 申请并开启「强制 HTTPS」
+4. **静态资源缓存** → 网站设置 →「配置文件」，在 `location /` 前插入:
+   ```nginx
+   location /assets/ {
+       proxy_pass http://127.0.0.1:8080;
+       expires 30d;
+       add_header Cache-Control "public, immutable";
+   }
+   ```
+
+**选项 B: 纯 Nginx（无面板）**
 
 ```bash
 sudo apt install nginx certbot python3-certbot-nginx
