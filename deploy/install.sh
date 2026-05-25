@@ -87,7 +87,7 @@ if [ -f "./cronix-linux" ]; then
     green "[OK] 已复制本地二进制"
 else
     echo "[INFO] 从 GitHub Release 下载..."
-    curl -fsSL -o "$APP_DIR/cronix" "$BIN_URL" || {
+    curl -fSL --progress-bar -o "$APP_DIR/cronix" "$BIN_URL" || {
         red "[FAIL] 下载失败，请检查网络或手动下载: $BIN_URL"
         exit 1
     }
