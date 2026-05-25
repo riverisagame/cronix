@@ -56,6 +56,9 @@
         -->
         <el-form-item label="Cron Expression" required>
           <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *" />
+          <div style="font-size:12px;color:#909399;margin-top:4px">
+            {{ cronHint }}
+          </div>
         </el-form-item>
 
         <!--
@@ -241,6 +244,46 @@ const saving = ref(false)
  *   description: 任务描述（空）
  */
 const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'', timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+
+// --- cronHint: 将 cron 表达式翻译为人话 ---
+const WEEKDAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
+
+function describeField(val: string, unit: string): string {
+  if (!val || val === '*') return ''
+  if (val.startsWith('*/')) return `每${val.slice(2)}${unit}`
+  if (val.includes(',')) {
+    const parts = val.split(',').map(v => describeField(v, ''))
+    return parts.join('、')
+  }
+  if (val.includes('-')) {
+    const [a, b] = val.split('-')
+    return `${a}-${b}${unit}`
+  }
+  return `${val}${unit}`
+}
+
+const cronHint = computed(() => {
+  const expr = form.value.cron_expr?.trim()
+  if (!expr) return '输入 cron 表达式后将显示可读说明'
+  const parts = expr.split(/\s+/)
+  if (parts.length < 5) return '格式：秒 分 时 日 月 星期'
+  const [, min, hour, day, month, wday] = parts
+  const segs: string[] = []
+
+  // 时间
+  if (min === '*' && hour === '*') segs.push('每分钟')
+  else if (hour === '*' && min !== '*') segs.push(`每小时第${min}分`)
+  else if (min === '0' && hour !== '*') segs.push(`${hour}:00`)
+  else segs.push(`${hour.padStart(2, '0')}:${min.padStart(2, '0')}`)
+
+  // 日期 vs 星期
+  if (day !== '*' && wday === '*') segs.push(describeField(day, '号'))
+  else if (day === '*' && wday !== '*') segs.push('每' + describeField(wday, '').replace(/^(\d)$/, '周$1').replace(/^0/, '日'))
+  else if (day === '*' && wday === '*') segs.push('每天')
+
+  if (month !== '*') segs.push(describeField(month, '月'))
+  return segs.join(' ')
+})
 
 /**
  * onMounted：页面加载完成后执行。
