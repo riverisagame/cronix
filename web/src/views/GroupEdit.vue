@@ -141,8 +141,16 @@ const cronHint = computed(() => {
   if (parts.length < 5 || parts.length > 6) return '格式错误：需5或6个字段（秒 分 时 日 月 周）'
   const OK = /^[\d\*\/\-\,\s]+$/.test(expr)
   if (!OK) return '格式错误：只能包含数字、* / - , 和空格'
-  const [, min, hour, day, month, wday] = parts.length === 6 ? parts : ['0', ...parts]
+  const [sec, min, hour, day, month, wday] = parts.length === 6 ? parts : ['0', ...parts]
   const segs: string[] = []
+  const hasSec = sec !== '*' && sec !== '0'
+
+  if (hasSec && min === '*' && hour === '*' && day === '*' && month === '*' && wday === '*') {
+    segs.push(describeField(sec, '秒'))
+    return segs.join(' ')
+  }
+  if (hasSec) segs.push(describeField(sec, '秒'))
+
   if (min === '*' && hour === '*') segs.push('每分钟')
   else if (hour === '*' && min !== '*') segs.push(`每小时第${min}分`)
   else if (min === '0' && hour !== '*') segs.push(`${hour.padStart(2,'0')}:00`)
@@ -204,10 +212,13 @@ function cronNext(expr: string, count: number = 5): string[] {
   const hours = parseCronField(hourS, 0, 23); const days = parseCronField(dayS, 1, 31)
   const mons = parseCronField(monS, 1, 12); const wdays = parseCronField(wdayS, 0, 6)
   if ([secs,mins,hours,days,mons,wdays].some(a => a.length === 0)) return []
-  const results: Date[] = []; const start = new Date(); start.setSeconds(start.getSeconds() + 60, 0)
-  for (let i = 0; i < 525600 && results.length < count; i++) {
-    const d = new Date(start.getTime() + i * 60000)
-    if (!mins.includes(d.getMinutes())) continue
+  const subMinute = secS !== '*' && secS !== '0'
+  const results: Date[] = []; const start = new Date(); start.setMilliseconds(0)
+  const stepMs = subMinute ? 1000 : 60000
+  const maxIter = subMinute ? 86400 : 525600
+  for (let i = 0; i < maxIter && results.length < count; i++) {
+    const d = new Date(start.getTime() + i * stepMs)
+    if (!secs.includes(d.getSeconds())) continue
     if (!hours.includes(d.getHours())) continue
     if (!mons.includes(d.getMonth() + 1)) continue
     const dayMatch = days.includes(d.getDate()), wdayMatch = wdays.includes(d.getDay())
