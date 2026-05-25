@@ -86,7 +86,7 @@ jobs:
       - name: "Verify - set password"
         run: |
           cp config.yaml /tmp/test-config.yaml
-          printf "admin\npassword123\npassword123\n" | ./cronix-linux-amd64 passwd -c /tmp/test-config.yaml 2>&1 || true
+          printf "admin\npassword123\npassword123\n" | sudo ./cronix-linux-amd64 passwd -c /tmp/test-config.yaml 2>&1 || true
           HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'password123', bcrypt.gensalt(rounds=4)).decode())")
           python3 -c "
           import yaml
@@ -103,7 +103,7 @@ jobs:
         run: |
           cp /tmp/test-config.yaml ./config-test.yaml
           sed -i 's|path: ./data/cronix.db|path: /tmp/cronix-test.db|' ./config-test.yaml
-          ./cronix-linux-amd64 serve -c ./config-test.yaml &
+          sudo ./cronix-linux-amd64 serve -c ./config-test.yaml &
           SERVER_PID=$!
           echo "Server PID: $SERVER_PID"
           for i in $(seq 1 10); do
@@ -216,7 +216,7 @@ jobs:
       - name: "Cleanup"
         if: always()
         run: |
-          pkill -f "cronix-linux-amd64" 2>/dev/null || true
+          sudo pkill -f "cronix-linux-amd64" 2>/dev/null || true
           echo "Server stopped"
 
   # ============================================================
