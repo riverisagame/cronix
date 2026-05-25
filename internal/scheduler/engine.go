@@ -15,6 +15,7 @@ import (
     "cronix/internal/model" // 数据模型：任务结构体
 
     "github.com/robfig/cron/v3" // robfig/cron：Go语言最流行的定时任务库
+    "github.com/rs/zerolog/log"  // zerolog/log：日志记录
     "gorm.io/gorm"              // GORM：Go语言的对象关系映射库，操作数据库
 )
 
@@ -58,8 +59,8 @@ func (e *Engine) Stop() context.Context {
     return e.cron.Stop() // Stop会等待所有正在执行的任务完成
 }
 
-// ReloadAll 从数据库重新加载所有"已启用"的任务到定时器中（原子操作）
-// 原子操作 = 要么全部成功，要么全部失败，不会出现"加载了一半"的情况
+// ReloadAll 从数据库重新加载所有"已启用"的任务到定时器中
+// 单个任务的 cron 表达式无效时跳过并告警，不影响其他任务和服务启动
 func (e *Engine) ReloadAll() error {
     // 第一步：在加锁之前先从数据库查询任务（查询数据库比较慢，不放在锁里）
     var tasks []model.Task                                      // 声明任务列表
@@ -78,6 +79,7 @@ func (e *Engine) ReloadAll() error {
     }
 
     // 第四步：把每个启用的任务注册到定时器中
+    var skipped int                                             // 跳过的无效任务计数
     for _, task := range tasks {                                // 遍历所有查询到的任务
         taskID := task.ID                                       // 保存任务ID（闭包用，避免循环变量问题）
         expr := task.CronExpr                                   // 获取原始cron表达式
@@ -89,16 +91,19 @@ func (e *Engine) ReloadAll() error {
         entryID, err := e.cron.AddFunc(expr, func() {           // expr是定时表达式，如"0 */5 * * * *"表示每5分钟
             e.triggerCh <- taskID                               // 到点后把任务ID发到触发通道
         })
-        if err != nil {                                         // 如果添加失败（比如Cron表达式不合法）
-            // 回滚：把已经添加的任务全部删掉，保持一致性
-            for tid, eid := range e.entryMap {
-                e.cron.Remove(eid)
-                delete(e.entryMap, tid)
-            }
-            return err
+        if err != nil {
+            // 单个任务无效不阻塞启动，跳过并记录告警
+            log.Warn().Err(err).Str("task", task.Name).Str("cron", task.CronExpr).Msg("跳过无效cron表达式的任务")
+            skipped++
+            continue
         }
         e.entryMap[taskID] = entryID                            // 记录任务ID和Cron条目ID的对应关系
     }
 
+    if skipped > 0 {
+        log.Warn().Int("skipped", skipped).Int("loaded", len(tasks)-skipped).Msg("部分任务因无效cron被跳过")
+    } else {
+        log.Info().Int("loaded", len(tasks)).Msg("所有任务加载成功")
+    }
     return nil                                                   // 加载成功
 }
