@@ -304,10 +304,18 @@ const cronHint = computed(() => {
   if (!expr) return '输入 cron 表达式后将显示可读说明'
   const parts = expr.split(/\s+/)
   if (parts.length < 5) return '格式：秒 分 时 日 月 星期'
-  const [, min, hour, day, month, wday] = parts
+  const [sec, min, hour, day, month, wday] = parts.length === 6 ? parts : ['0', ...parts]
   const segs: string[] = []
+  const hasSec = sec !== '*' && sec !== '0'
 
-  // 时间
+  // 秒级
+  if (hasSec && min === '*' && hour === '*' && day === '*' && month === '*' && wday === '*') {
+    segs.push(describeField(sec, '秒'))
+    return segs.join(' ')
+  }
+  if (hasSec) segs.push(describeField(sec, '秒'))
+
+  // 时分
   if (min === '*' && hour === '*') segs.push('每分钟')
   else if (hour === '*' && min !== '*') segs.push(`每小时第${min}分`)
   else if (min === '0' && hour !== '*') segs.push(`${hour}:00`)
@@ -397,11 +405,15 @@ function cronNext(expr: string, count: number = 5): string[] {
   const wdays = parseCronField(wdayS, 0, 6)
   if ([secs,mins,hours,days,mons,wdays].some(a => a.length === 0)) return []
 
+  // Detect sub-minute: iterate by seconds if seconds field is non-trivial
+  const subMinute = secS !== '*' && secS !== '0'
   const results: Date[] = []
-  const start = new Date(); start.setSeconds(start.getSeconds() + 60, 0)
-  const maxIter = 525600 // 1 year in minutes
+  const start = new Date(); start.setMilliseconds(0)
+  const stepMs = subMinute ? 1000 : 60000
+  const maxIter = subMinute ? 86400 : 525600 // 1 day or 1 year
   for (let i = 0; i < maxIter && results.length < count; i++) {
-    const d = new Date(start.getTime() + i * 60000)
+    const d = new Date(start.getTime() + i * stepMs)
+    if (!secs.includes(d.getSeconds())) continue
     if (!mins.includes(d.getMinutes())) continue
     if (!hours.includes(d.getHours())) continue
     if (!mons.includes(d.getMonth() + 1)) continue
