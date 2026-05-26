@@ -275,7 +275,7 @@ func runServe(cmd *cobra.Command, args []string) {
     // TaskService 提供任务的增删改查操作
     taskSvc := &service.TaskService{DB: database.DB, Engine: engine}
     // ExecutionService 提供执行日志的查询操作
-    execSvc := &service.ExecutionService{DB: database.DB}
+    execSvc := service.NewExecutionService(database.DB)
 
     // --- 第9步：初始化 HTTP 请求处理器 ---
     // 每个 Handler 处理一类 HTTP 请求

@@ -111,12 +111,15 @@ func (h *LogHandler) UpdateSettings(c *gin.Context) {
 // ClearAllLogs deletes all execution logs.
 // DELETE /api/logs
 func (h *LogHandler) ClearAllLogs(c *gin.Context) {
-    n, err := h.ExecSvc.ClearAllLogs()
+    taskLogs, groupLogs, err := h.ExecSvc.ClearAllLogs()
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"deleted": n}})
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{
+        "task_logs_deleted":  taskLogs,
+        "group_logs_deleted": groupLogs,
+    }})
 }
 
 // ClearTaskLogs deletes all execution logs for a specific task.

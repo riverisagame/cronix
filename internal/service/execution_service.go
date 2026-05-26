@@ -5,14 +5,27 @@
 package service
 
 import (
-    "time"                        // 时间处理：计算截止日期
+    "sync"                        // 并发安全的读写锁
+    "time"                        // 时间处理：计算截止日期 / TTL 过期
     "cronix/internal/model"       // 数据模型
     "gorm.io/gorm"                // GORM数据库操作
 )
 
-// ExecutionService 是执行日志的服务层
+type statsCache struct {
+    mu       sync.RWMutex
+    data     map[string]interface{}
+    expireAt time.Time
+}
+
+// ExecutionService is the execution log service layer.
 type ExecutionService struct {
-    DB *gorm.DB                   // 数据库连接
+    DB    *gorm.DB
+    cache *statsCache
+}
+
+// NewExecutionService creates a new ExecutionService.
+func NewExecutionService(db *gorm.DB) *ExecutionService {
+    return &ExecutionService{DB: db, cache: &statsCache{}}
 }
 
 // GetTaskLogs 获取某个任务的执行日志（分页、支持按状态筛选）
@@ -78,37 +91,50 @@ func (s *ExecutionService) GetAllLogs(page, pageSize int, taskName, status, sinc
 //   today_success: 今天成功的次数
 //   today_failed: 今天失败的次数
 func (s *ExecutionService) GetDashboardStats() (map[string]interface{}, error) {
-    // 统计任务总数
+    // Check cache (60s TTL)
+    s.cache.mu.RLock()
+    if s.cache.data != nil && time.Now().Before(s.cache.expireAt) {
+        data := s.cache.data
+        s.cache.mu.RUnlock()
+        return data, nil
+    }
+    s.cache.mu.RUnlock()
+
+    s.cache.mu.Lock()
+    defer s.cache.mu.Unlock()
+    // Double-check after acquiring write lock
+    if s.cache.data != nil && time.Now().Before(s.cache.expireAt) {
+        return s.cache.data, nil
+    }
+
+    // ---- existing stats queries (keep exactly as-is) ----
     var totalTasks int64
     s.DB.Model(&model.Task{}).Count(&totalTasks)
 
-    // 统计已启用的任务数（enabled = true）
     var enabledTasks int64
     s.DB.Model(&model.Task{}).Where("enabled = ?", true).Count(&enabledTasks)
 
-    // 计算今天的起始时间（00:00:00）
-    today := time.Now().Truncate(24 * time.Hour)                  // Truncate 向下取整到天级别
+    today := time.Now().Truncate(24 * time.Hour)
 
-    // 统计今天的执行总数
     var todayTotal int64
     s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ?", today).Count(&todayTotal)
 
-    // 统计今天的成功数
     var todaySuccess int64
     s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ? AND status = ?", today, "success").Count(&todaySuccess)
 
-    // 统计今天的失败数
     var todayFailed int64
     s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ? AND status = ?", today, "failed").Count(&todayFailed)
 
-    // 把统计结果放入map返回
-    return map[string]interface{}{
-        "total_tasks":    totalTasks,
-        "enabled_tasks":  enabledTasks,
-        "today_total":    todayTotal,
-        "today_success":  todaySuccess,
-        "today_failed":   todayFailed,
-    }, nil
+    stats := map[string]interface{}{
+        "total_tasks":   totalTasks,
+        "enabled_tasks": enabledTasks,
+        "today_total":   todayTotal,
+        "today_success": todaySuccess,
+        "today_failed":  todayFailed,
+    }
+    s.cache.data = stats
+    s.cache.expireAt = time.Now().Add(60 * time.Second)
+    return stats, nil
 }
 
 // CleanOldLogs 删除超过指定天数的旧日志
@@ -118,10 +144,14 @@ func (s *ExecutionService) CleanOldLogs(retentionDays int) error {
     return s.DB.Where("created_at < ?", cutoff).Delete(&model.ExecutionLog{}).Error // 删除早于截止时间的记录
 }
 
-// ClearAllLogs 清空所有执行日志
-func (s *ExecutionService) ClearAllLogs() (int64, error) {
-    result := s.DB.Where("1 = 1").Delete(&model.ExecutionLog{})
-    return result.RowsAffected, result.Error
+// ClearAllLogs deletes all execution logs and group execution logs.
+func (s *ExecutionService) ClearAllLogs() (int64, int64, error) {
+    r1 := s.DB.Where("1 = 1").Delete(&model.ExecutionLog{})
+    if r1.Error != nil {
+        return 0, 0, r1.Error
+    }
+    r2 := s.DB.Where("1 = 1").Delete(&model.GroupExecutionLog{})
+    return r1.RowsAffected, r2.RowsAffected, r2.Error
 }
 
 // ClearTaskLogs 清空指定任务的执行日志
