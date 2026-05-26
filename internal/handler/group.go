@@ -72,11 +72,15 @@ func (h *GroupHandler) UpdateGroup(c *gin.Context) {
 
 func (h *GroupHandler) DeleteGroup(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-    if err := h.GroupSvc.DeleteGroup(uint(id)); err != nil {
+    taskCount, logCount, err := h.GroupSvc.DeleteGroup(uint(id))
+    if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{
+        "tasks_affected": taskCount,
+        "logs_deleted":   logCount,
+    }})
 }
 
 func (h *GroupHandler) SetMembers(c *gin.Context) {
