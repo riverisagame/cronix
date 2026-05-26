@@ -47,6 +47,9 @@ type ExecutionLog struct {
     // 好处是：查日志的时候不用每次都去任务表找名字，快了不止一点
     TaskName string `gorm:"not null" json:"task_name"`
 
+    // GroupName is populated at query time via task->group lookup, not persisted.
+    GroupName string `gorm:"-" json:"group_name,omitempty"`
+
     // CronExpr 触发这次执行的 cron 表达式
     // 记录下来方便追溯"是按哪个时间规则触发的"
     CronExpr string `json:"cron_expr,omitempty"`

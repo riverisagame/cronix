@@ -12,6 +12,7 @@ import (
     "time"         // current date for export filename
 
     "cronix/internal/config"   // 配置模块：读取和保存系统设置
+    "cronix/internal/model"    // 数据模型
     "cronix/internal/service"   // 服务层：业务逻辑
 
     "github.com/gin-gonic/gin"  // Gin框架
@@ -185,50 +186,62 @@ func (h *LogHandler) ExportLogs(c *gin.Context) {
     status := c.Query("status")
     since := c.Query("since")
 
-    logs, err := h.ExecSvc.ExportLogs(taskName, status, since, maxRows)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
-        return
-    }
-
     date := time.Now().Format("2006-01-02")
 
     if format == "json" {
+        // JSON: batch mode (limited to maxRows, acceptable for JSON consumers)
+        var logs []model.ExecutionLog
+        if err := h.ExecSvc.ExportLogsStream(taskName, status, since, maxRows, func(l model.ExecutionLog) error {
+            logs = append(logs, l)
+            return nil
+        }); err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+            return
+        }
         c.Header("Content-Type", "application/json; charset=utf-8")
         c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"cronix-logs-%s.json\"", date))
         c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": logs})
         return
     }
 
-    // Default: CSV
+    // CSV: stream row-by-row, never materializes full result set
     c.Header("Content-Type", "text/csv; charset=utf-8")
     c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"cronix-logs-%s.csv\"", date))
     w := csv.NewWriter(c.Writer)
-    if err := w.Write([]string{"id", "task_name", "status", "trigger_type", "start_time", "end_time", "exit_code", "error_msg", "created_at"}); err != nil {
+    if err := w.Write([]string{"id", "task_name", "group_name", "status", "trigger_type", "start_time", "end_time", "duration_ms", "exit_code", "output_truncated", "error_msg"}); err != nil {
         return
     }
-    for _, l := range logs {
+    if err := h.ExecSvc.ExportLogsStream(taskName, status, since, maxRows, func(l model.ExecutionLog) error {
         endTime := ""
+        var durationMs int64
         if l.EndTime != nil {
             endTime = l.EndTime.Format("2006-01-02 15:04:05")
+            durationMs = l.EndTime.Sub(l.StartTime).Milliseconds()
         }
         exitCode := ""
         if l.ExitCode != nil {
             exitCode = strconv.Itoa(*l.ExitCode)
         }
-        if err := w.Write([]string{
+        outputTrunc := "false"
+        truncateKB := config.AppConfig.Executor.OutputTruncateKB
+        if truncateKB > 0 && len(l.Output) > truncateKB*1024 {
+            outputTrunc = "true"
+        }
+        return w.Write([]string{
             strconv.FormatUint(uint64(l.ID), 10),
             l.TaskName,
+            l.GroupName,
             l.Status,
             l.TriggerType,
             l.StartTime.Format("2006-01-02 15:04:05"),
             endTime,
+            strconv.FormatInt(durationMs, 10),
             exitCode,
+            outputTrunc,
             l.ErrorMsg,
-            l.CreatedAt.Format("2006-01-02 15:04:05"),
-        }); err != nil {
-            return
-        }
+        })
+    }); err != nil {
+        return
     }
     w.Flush()
 }

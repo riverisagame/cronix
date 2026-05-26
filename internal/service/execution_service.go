@@ -80,6 +80,42 @@ func (s *ExecutionService) GetAllLogs(page, pageSize int, taskName, status, sinc
     if err := query.Order("start_time DESC").Offset(offset).Limit(pageSize).Find(&logs).Error; err != nil {
         return nil, 0, err
     }
+
+    // Enrich with group names via task->group lookup
+    taskIDs := make([]uint, 0, len(logs))
+    for _, l := range logs {
+        if l.TaskID != nil {
+            taskIDs = append(taskIDs, *l.TaskID)
+        }
+    }
+    if len(taskIDs) > 0 {
+        var tasks []model.Task
+        s.DB.Where("id IN ? AND group_id IS NOT NULL", taskIDs).Find(&tasks)
+        if len(tasks) > 0 {
+            groupIDs := make([]uint, 0, len(tasks))
+            taskGroup := make(map[uint]uint, len(tasks))
+            for _, t := range tasks {
+                if t.GroupID != nil {
+                    taskGroup[t.ID] = *t.GroupID
+                    groupIDs = append(groupIDs, *t.GroupID)
+                }
+            }
+            var groups []model.TaskGroup
+            s.DB.Where("id IN ?", groupIDs).Find(&groups)
+            groupNames := make(map[uint]string, len(groups))
+            for _, g := range groups {
+                groupNames[g.ID] = g.Name
+            }
+            for i := range logs {
+                if logs[i].TaskID != nil {
+                    if gid, ok := taskGroup[*logs[i].TaskID]; ok {
+                        logs[i].GroupName = groupNames[gid]
+                    }
+                }
+            }
+        }
+    }
+
     return logs, total, nil
 }
 
@@ -137,11 +173,10 @@ func (s *ExecutionService) GetDashboardStats() (map[string]interface{}, error) {
     return stats, nil
 }
 
-// ExportLogs returns up to maxRows execution logs matching filters.
-// Output column is omitted to keep the response compact.
-func (s *ExecutionService) ExportLogs(taskName, status, since string, maxRows int) ([]model.ExecutionLog, error) {
-    var logs []model.ExecutionLog
-    query := s.DB.Model(&model.ExecutionLog{}).Omit("output")
+// ExportLogsStream iterates matching execution logs, calling fn for each row.
+// Rows are streamed from the DB cursor — the full result set is never loaded into memory.
+func (s *ExecutionService) ExportLogsStream(taskName, status, since string, maxRows int, fn func(model.ExecutionLog) error) error {
+    query := s.DB.Model(&model.ExecutionLog{})
 
     if taskName != "" {
         query = query.Where("task_name LIKE ?", "%"+taskName+"%")
@@ -154,10 +189,23 @@ func (s *ExecutionService) ExportLogs(taskName, status, since string, maxRows in
             query = query.Where("start_time > ?", time.Now().Add(-d))
         }
     }
-    if err := query.Order("start_time DESC").Limit(maxRows).Find(&logs).Error; err != nil {
-        return nil, err
+
+    rows, err := query.Order("start_time DESC").Limit(maxRows).Rows()
+    if err != nil {
+        return err
     }
-    return logs, nil
+    defer rows.Close()
+
+    for rows.Next() {
+        var log model.ExecutionLog
+        if err := s.DB.ScanRows(rows, &log); err != nil {
+            return err
+        }
+        if err := fn(log); err != nil {
+            return err
+        }
+    }
+    return rows.Err()
 }
 
 // CleanOldLogs 删除超过指定天数的旧日志
