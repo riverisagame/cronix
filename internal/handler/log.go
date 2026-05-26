@@ -5,8 +5,11 @@
 package handler
 
 import (
+    "encoding/csv" // CSV writer for streaming export
+    "fmt"          // Sprintf for Content-Disposition header
     "net/http"     // HTTP状态码
     "strconv"      // 字符串转数字
+    "time"         // current date for export filename
 
     "cronix/internal/config"   // 配置模块：读取和保存系统设置
     "cronix/internal/service"   // 服务层：业务逻辑
@@ -164,4 +167,64 @@ func (h *LogHandler) ClearGroupLogs(c *gin.Context) {
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"deleted": n}})
+}
+
+// ExportLogs exports execution logs as CSV or JSON.
+// GET /api/logs/export?format=csv|json&task_name=&status=&since=&max=100000
+func (h *LogHandler) ExportLogs(c *gin.Context) {
+    format := c.DefaultQuery("format", "csv")
+    maxRows, _ := strconv.Atoi(c.DefaultQuery("max", "100000"))
+    if maxRows > 100000 {
+        maxRows = 100000
+    }
+    if maxRows < 1 {
+        maxRows = 100000
+    }
+
+    taskName := c.Query("task_name")
+    status := c.Query("status")
+    since := c.Query("since")
+
+    logs, err := h.ExecSvc.ExportLogs(taskName, status, since, maxRows)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+        return
+    }
+
+    date := time.Now().Format("2006-01-02")
+
+    if format == "json" {
+        c.Header("Content-Type", "application/json; charset=utf-8")
+        c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"cronix-logs-%s.json\"", date))
+        c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": logs})
+        return
+    }
+
+    // Default: CSV
+    c.Header("Content-Type", "text/csv; charset=utf-8")
+    c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"cronix-logs-%s.csv\"", date))
+    w := csv.NewWriter(c.Writer)
+    w.Write([]string{"id", "task_name", "status", "trigger_type", "start_time", "end_time", "exit_code", "error_msg", "created_at"})
+    for _, l := range logs {
+        endTime := ""
+        if l.EndTime != nil {
+            endTime = l.EndTime.Format("2006-01-02 15:04:05")
+        }
+        exitCode := ""
+        if l.ExitCode != nil {
+            exitCode = strconv.Itoa(*l.ExitCode)
+        }
+        w.Write([]string{
+            strconv.FormatUint(uint64(l.ID), 10),
+            l.TaskName,
+            l.Status,
+            l.TriggerType,
+            l.StartTime.Format("2006-01-02 15:04:05"),
+            endTime,
+            exitCode,
+            l.ErrorMsg,
+            l.CreatedAt.Format("2006-01-02 15:04:05"),
+        })
+    }
+    w.Flush()
 }

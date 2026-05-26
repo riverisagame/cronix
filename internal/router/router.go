@@ -72,6 +72,7 @@ func SetupRouter(
         api.GET("/logs", logH.GetAllLogs)                      // 获取所有日志
         api.DELETE("/logs", logH.ClearAllLogs)                 // 清空所有日志
         api.DELETE("/logs/:id", logH.DeleteLog)               // 删除单条日志
+        api.GET("/logs/export", logH.ExportLogs)                  // 导出日志CSV/JSON
         api.GET("/logs/:id", logH.GetLog)                      // 获取单条日志详情（含完整output）
         api.DELETE("/tasks/:id/logs", logH.ClearTaskLogs)     // 清空指定任务日志
         api.DELETE("/groups/:id/logs", logH.ClearGroupLogs)  // 清空组日志

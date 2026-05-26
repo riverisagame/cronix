@@ -137,6 +137,29 @@ func (s *ExecutionService) GetDashboardStats() (map[string]interface{}, error) {
     return stats, nil
 }
 
+// ExportLogs returns up to maxRows execution logs matching filters.
+// Output column is omitted to keep the response compact.
+func (s *ExecutionService) ExportLogs(taskName, status, since string, maxRows int) ([]model.ExecutionLog, error) {
+	var logs []model.ExecutionLog
+	query := s.DB.Model(&model.ExecutionLog{}).Omit("output")
+
+	if taskName != "" {
+		query = query.Where("task_name LIKE ?", "%"+taskName+"%")
+	}
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if since != "" {
+		if d, err := time.ParseDuration(since); err == nil {
+			query = query.Where("start_time > ?", time.Now().Add(-d))
+		}
+	}
+	if err := query.Order("start_time DESC").Limit(maxRows).Find(&logs).Error; err != nil {
+		return nil, err
+	}
+	return logs, nil
+}
+
 // CleanOldLogs 删除超过指定天数的旧日志
 // 参数 retentionDays：保留天数（超过这个天数的日志会被删除）
 func (s *ExecutionService) CleanOldLogs(retentionDays int) error {
