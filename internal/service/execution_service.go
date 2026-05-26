@@ -17,10 +17,24 @@ type statsCache struct {
     expireAt time.Time
 }
 
+// Invalidate clears the cached stats data.
+// @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+func (c *statsCache) Invalidate() {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.data = nil
+}
+
 // ExecutionService is the execution log service layer.
 type ExecutionService struct {
     DB    *gorm.DB
     cache *statsCache
+}
+
+// InvalidateStatsCache invalidates the dashboard statistics cache.
+// @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+func (s *ExecutionService) InvalidateStatsCache() {
+    s.cache.Invalidate()
 }
 
 // NewExecutionService creates a new ExecutionService.
@@ -268,18 +282,28 @@ func (s *ExecutionService) ClearAllLogs() (int64, int64, error) {
         return 0, 0, r1.Error
     }
     r2 := s.DB.Where("1 = 1").Delete(&model.GroupExecutionLog{})
+    if r2.Error == nil {
+        s.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+    }
     return r1.RowsAffected, r2.RowsAffected, r2.Error
 }
 
 // ClearTaskLogs 清空指定任务的执行日志
 func (s *ExecutionService) ClearTaskLogs(taskID uint) (int64, error) {
     result := s.DB.Where("task_id = ?", taskID).Delete(&model.ExecutionLog{})
+    if result.Error == nil {
+        s.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+    }
     return result.RowsAffected, result.Error
 }
 
 // DeleteLog 删除单条执行日志
 func (s *ExecutionService) DeleteLog(id uint) error {
-    return s.DB.Delete(&model.ExecutionLog{}, id).Error
+    err := s.DB.Delete(&model.ExecutionLog{}, id).Error
+    if err == nil {
+        s.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+    }
+    return err
 }
 
 // GetLog returns a single execution log with full output.
@@ -303,5 +327,8 @@ func (s *ExecutionService) GetLog(id uint) (*model.ExecutionLog, error) {
 // ClearGroupLogs 清空指定组的执行日志
 func (s *ExecutionService) ClearGroupLogs(groupID uint) (int64, error) {
     result := s.DB.Where("group_id = ?", groupID).Delete(&model.GroupExecutionLog{})
+    if result.Error == nil {
+        s.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+    }
     return result.RowsAffected, result.Error
 }

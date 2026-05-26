@@ -20,13 +20,21 @@ import (
     "gorm.io/gorm"                   // GORM：数据库操作
 )
 
+// StatsCacheInvalidator defines the interface to invalidate dashboard statistics cache.
+// This interface avoids circular dependency between scheduler and service packages.
+// @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+type StatsCacheInvalidator interface {
+	InvalidateStatsCache()
+}
+
 // Executor 是任务执行器，负责真正运行任务
 // 它从调度引擎接收触发信号，然后在线程池中执行
 type Executor struct {
-    db     *gorm.DB       // 数据库连接：查询任务、保存执行日志
-    pool   *ants.Pool     // ants线程池：控制同时运行的任务数量，防止资源耗尽
-    cfg    *config.Config // 系统配置：线程池大小、输出截断大小等
-    engine *Engine        // 调度引擎：从这里接收"该执行任务了"的信号
+	db               *gorm.DB               // 数据库连接：查询任务、保存执行日志
+	pool             *ants.Pool             // ants线程池：控制同时运行的任务数量，防止资源耗尽
+	cfg              *config.Config         // 系统配置：线程池大小、输出截断大小等
+	engine           *Engine                // 调度引擎：从这里接收"该执行任务了"的信号
+	CacheInvalidator StatsCacheInvalidator // 缓存失效接口
 }
 
 // NewExecutor 创建任务执行器
@@ -398,6 +406,9 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog, 
     }
 
     e.db.Save(execLog)                                           // 把执行结果保存到数据库
+    if e.CacheInvalidator != nil {
+        e.CacheInvalidator.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+    }
 }
 
 // truncate 截断字符串，防止输出太长
@@ -499,8 +510,11 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
         glog.Status = "partial"
     } else if failed == len(members) && len(members) > 0 {
         glog.Status = "failed"
-    } else {
-        glog.Status = "success"
-    }
-    e.db.Save(&glog)
+	} else {
+		glog.Status = "success"
+	}
+	e.db.Save(&glog)
+	if e.CacheInvalidator != nil {
+		e.CacheInvalidator.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+	}
 }

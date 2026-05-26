@@ -18,7 +18,8 @@
       ======== 第一块：执行器设置 ========
       style="margin-bottom:20px" 和下一块之间留间距
     -->
-    <el-card shadow="hover" style="margin-bottom:20px">
+    <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+    <el-card shadow="hover" class="glass-card" style="margin-bottom:20px">
       <!--
         #header 插槽自定义卡片标题
         加粗显示 "Executor"
@@ -61,7 +62,8 @@
     <!--
       ======== 第二块：日志保留设置 ========
     -->
-    <el-card shadow="hover" style="margin-bottom:20px">
+    <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+    <el-card shadow="hover" class="glass-card" style="margin-bottom:20px">
       <template #header><span style="font-weight:bold">Log Retention</span></template>
       <el-row :gutter="30">
         <!-- 左侧：保留天数 -->
@@ -103,7 +105,8 @@
         2. 依赖该任务的下游任务也被牵连出问题
         就像家里的电闸：短路时自动跳闸，过一会儿再试着合上。
     -->
-    <el-card shadow="hover">
+    <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+    <el-card shadow="hover" class="glass-card">
       <template #header><span style="font-weight:bold">Circuit Breaker</span></template>
       <el-row :gutter="30">
         <!-- 左侧：失败阈值 -->

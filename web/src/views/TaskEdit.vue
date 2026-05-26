@@ -28,7 +28,7 @@
       <h2 style="margin:0 0 0 10px">{{ isNew ? 'Create Task' : 'Edit Task' }}</h2>
     </div>
 
-    <el-card shadow="hover">
+    <el-card shadow="hover" class="glass-card">
       <!--
         el-form：表单组件
         :model="form" 把表单数据绑定到 form 响应式对象上
@@ -60,6 +60,7 @@
           <!-- 快捷宏 -->
           <div style="margin-top:10px;display:flex;gap:4px;flex-wrap:wrap">
             <span v-for="m in cronMacros" :key="m.label"
+              class="macro-tag"
               style="cursor:pointer;font-size:12px;padding:2px 8px;border:1px solid #555;border-radius:4px;color:#c0c4cc"
               @click="applyMacro(m.value)" :title="m.label + ': ' + m.value">
               {{ m.label }}
@@ -523,3 +524,48 @@ async function save() {
   }
 }
 </script>
+
+<style scoped>
+/* 磨砂玻璃卡片 */
+.glass-card {
+  background: rgba(20, 27, 45, 0.75) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* 分割线高级感 */
+:deep(.el-divider) {
+  border-top: 1px dashed rgba(255, 255, 255, 0.1) !important;
+  background: transparent !important;
+}
+:deep(.el-divider__text) {
+  background: #141b2d !important;
+  color: #10b981 !important;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+/* 按钮微动效 */
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.2);
+  transition: all 0.3s ease;
+}
+:deep(.el-button--primary:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+/* 宏卡片高亮 */
+.macro-tag {
+  transition: all 0.2s ease;
+}
+.macro-tag:hover {
+  border-color: #10b981 !important;
+  color: #10b981 !important;
+  background: rgba(16, 185, 129, 0.05) !important;
+}
+</style>

@@ -231,19 +231,81 @@ const isLoginPage = computed(() => route.path === '/login')
   - font-family 设置字体优先级：Helvetica Neue（英文字体）> PingFang SC（苹果中文）> Hiragino Sans GB（旧苹果中文）
     > Microsoft YaHei（微软雅黑）> Arial（通用英文字体）> sans-serif（系统默认无衬线字体）
 */
-body { margin: 0; font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif; }
+:root {
+  /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
+  --cyber-bg: #0c0d12;
+  --cyber-surface: rgba(22, 25, 34, 0.7);
+  --cyber-border: rgba(64, 158, 255, 0.12);
+  --cyber-glow-blue: rgba(64, 158, 255, 0.18);
+  --cyber-green: #10b981;
+  --cyber-glow-green: rgba(16, 185, 129, 0.35);
+  --cyber-red: #ef4444;
+  --cyber-font-mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+}
 
-/*
-  页面切换动画的样式定义（配合模板里的 <transition name="fade"> 使用）
-  enter-active：新页面进入时的过渡效果 -- 透明度在 0.2 秒内平滑变化
-  leave-active：旧页面离开时的过渡效果 -- 同样 0.2 秒
-*/
+body {
+  margin: 0;
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  background-color: var(--cyber-bg) !important;
+  color: #e5e7eb;
+}
+
+/* 磨砂玻璃卡片 */
+.glass-card {
+  /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
+  background: var(--cyber-surface) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--cyber-border) !important;
+  border-radius: 12px !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  will-change: transform, box-shadow;
+}
+
+.glass-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(64, 158, 255, 0.35) !important;
+  box-shadow: 0 12px 30px var(--cyber-glow-blue) !important;
+}
+
+/* 状态呼吸圆点指示器 */
+.status-dot {
+  /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 10px;
+  vertical-align: middle;
+  transition: all 0.3s ease;
+}
+
+.status-dot.active {
+  background-color: var(--cyber-green);
+  animation: pulse-green 2s infinite;
+}
+
+.status-dot.inactive {
+  background-color: #5c5e66;
+  box-shadow: none;
+}
+
+/* 雷达绿光扩散呼吸动画 */
+@keyframes pulse-green {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.75);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
-
-/*
-  enter-from：新页面进入动画开始时的状态 -- 完全透明（看不见）
-  leave-to：旧页面离开动画结束时的状态 -- 完全透明（消失）
-  效果就是：旧页面淡出，新页面淡入
-*/
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

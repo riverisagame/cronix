@@ -151,3 +151,94 @@ func (e *Engine) ReloadAll() error {
 
     return nil                                                   // 加载成功
 }
+
+// RemoveTaskSchedule safely removes a task's cron entry from the engine.
+// @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+func (e *Engine) RemoveTaskSchedule(taskID uint) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if entryID, ok := e.entryMap[taskID]; ok {
+		e.cron.Remove(entryID)
+		delete(e.entryMap, taskID)
+		log.Info().Uint("task_id", taskID).Msg("增量移除任务定时器")
+	}
+}
+
+// UpdateTaskSchedule incrementally registers or updates a task's cron entry in the engine.
+// @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+func (e *Engine) UpdateTaskSchedule(task model.Task) error {
+	// First, safely remove any existing schedule for this task.
+	e.RemoveTaskSchedule(task.ID)
+
+	// If the task is not eligible for scheduling, we are done.
+	if !task.Enabled || task.CronExpr == "" || task.GroupID != nil {
+		return nil
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	expr := task.CronExpr
+	// Automatically append "0 " prefix for 5-field cron expressions.
+	if len(strings.Fields(expr)) == 5 {
+		expr = "0 " + expr
+	}
+
+	taskID := task.ID
+	entryID, err := e.cron.AddFunc(expr, func() {
+		e.triggerCh <- taskID
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("task", task.Name).Str("cron", task.CronExpr).Msg("增量注册任务定时器失败")
+		return err
+	}
+
+	e.entryMap[taskID] = entryID
+	log.Info().Str("task", task.Name).Uint("task_id", taskID).Str("cron", expr).Msg("增量注册任务定时器成功")
+	return nil
+}
+
+// RemoveGroupSchedule safely removes a group's cron entry from the engine.
+// @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+func (e *Engine) RemoveGroupSchedule(groupID uint) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if entryID, ok := e.groupEntryMap[groupID]; ok {
+		e.cron.Remove(entryID)
+		delete(e.groupEntryMap, groupID)
+		log.Info().Uint("group_id", groupID).Msg("增量移除任务组定时器")
+	}
+}
+
+// UpdateGroupSchedule incrementally registers or updates a group's cron entry in the engine.
+// @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+func (e *Engine) UpdateGroupSchedule(group model.TaskGroup) error {
+	e.RemoveGroupSchedule(group.ID)
+
+	if !group.Enabled || group.CronExpr == "" {
+		return nil
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	expr := group.CronExpr
+	if len(strings.Fields(expr)) == 5 {
+		expr = "0 " + expr
+	}
+
+	if e.groupTrigger != nil {
+		groupID := group.ID
+		entryID, err := e.cron.AddFunc(expr, func() {
+			e.groupTrigger(groupID)
+		})
+		if err != nil {
+			log.Warn().Err(err).Str("group", group.Name).Str("cron", group.CronExpr).Msg("增量注册任务组定时器失败")
+			return err
+		}
+		e.groupEntryMap[groupID] = entryID
+		log.Info().Str("group", group.Name).Uint("group_id", groupID).Str("cron", expr).Msg("增量注册任务组定时器成功")
+	}
+	return nil
+}
+

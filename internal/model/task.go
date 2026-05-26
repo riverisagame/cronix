@@ -158,6 +158,10 @@ type Task struct {
     // UpdatedAt 任务最后修改时间
     // GORM 自动管理：每次更新记录时自动刷新为当前时间
     UpdatedAt time.Time `json:"updated_at"`
+
+    // DependsOnIDs 存放该任务依赖的所有前置任务 ID 列表（非持久化，仅用于拓扑渲染）
+    // @Ref: docs/sps/plans/20260527_topology_shutdown_plan.md | @Date: 2026-05-27
+    DependsOnIDs []uint `gorm:"-" json:"depends_on_ids,omitempty"`
 }
 
 // TableName 告诉 GORM 这个模型对应的数据库表名叫什么

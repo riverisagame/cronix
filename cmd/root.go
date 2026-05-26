@@ -39,6 +39,8 @@ import (
     // "syscall" 是底层的"系统调用"工具箱
     // 这里用它来识别 SIGINT（Ctrl+C 中断信号）和 SIGTERM（终止信号）
     "syscall"
+    "net/http"
+    "time"
 
     // 以下是我们自己写的项目内部模块
     // 每个模块负责一块独立的功能，就像汽车的不同零件
@@ -276,6 +278,12 @@ func runServe(cmd *cobra.Command, args []string) {
     taskSvc := &service.TaskService{DB: database.DB, Engine: engine}
     // ExecutionService 提供执行日志的查询操作
     execSvc := service.NewExecutionService(database.DB)
+    taskSvc.ExecSvc = execSvc // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+
+    // 注入 Invalidator 接口，打破循环引用
+    exec.CacheInvalidator = execSvc // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+
+    groupSvc := &service.GroupService{DB: database.DB, Engine: engine, ExecSvc: execSvc} // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
 
     // --- 第9步：初始化 HTTP 请求处理器 ---
     // 每个 Handler 处理一类 HTTP 请求
@@ -283,7 +291,7 @@ func runServe(cmd *cobra.Command, args []string) {
     authH := &handler.AuthHandler{} // 登录认证相关的请求处理
     taskH := &handler.TaskHandler{TaskSvc: taskSvc, ExecSvc: execSvc, Executor: exec} // 任务管理相关的请求处理
     logH := &handler.LogHandler{ExecSvc: execSvc} // 日志查看相关的请求处理
-    groupH := &handler.GroupHandler{GroupSvc: &service.GroupService{DB: database.DB, Engine: engine}, TaskSvc: taskSvc, Executor: exec} // 任务组管理
+    groupH := &handler.GroupHandler{GroupSvc: groupSvc, TaskSvc: taskSvc, Executor: exec} // 任务组管理
 
     // --- 第10步：配置路由并启动 HTTP 服务器 ---
     // router.SetupRouter 创建一个 Gin 框架的路由引擎
@@ -292,33 +300,57 @@ func runServe(cmd *cobra.Command, args []string) {
     // webDist 是嵌入的前端文件，用于提供网页界面
     r := router.SetupRouter(cfg, authH, taskH, logH, groupH, webDist)
 
-    // --- 第11步：设置优雅退出 ---
-    // 当用户按下 Ctrl+C 或者服务器收到终止信号时
-    // 程序应该先把手头的活干完再退出，而不是硬生生中断
-    // 这就是"优雅退出"（Graceful Shutdown）
+    // --- 第11步：启动 HTTP(S) 服务器的准备工作 ---
+    addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+    srv := &http.Server{
+        Addr:    addr,
+        Handler: r,
+    }
+
+    // --- 第12步：设置优雅退出 ---
+    // @Ref: docs/sps/plans/20260527_topology_shutdown_plan.md | @Date: 2026-05-27
     go func() {
-        // make 创建一个能装操作系统信号的"管道"（channel，像一个传送带）
-        // 缓冲区大小为 1，表示最多暂存一个信号
         sigCh := make(chan os.Signal, 1)
-        // signal.Notify 告诉操作系统："如果有 SIGINT（Ctrl+C）或 SIGTERM（终止）信号，
-        // 请把它们放到 sigCh 这个传送带上"
         signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-        // <-sigCh 的意思是"等着，直到传送带上有东西传过来"
-        // 这一行会阻塞住，直到用户按了 Ctrl+C
         <-sigCh
-        // 收到了退出信号，开始优雅关闭
         log.Info().Msg("正在优雅关闭服务器...")
-        cancel()          // 1. 先发信号让执行器停止接收新任务
-        engine.Stop()     // 2. 停掉调度引擎（不再触发新任务）
-        exec.Shutdown()   // 3. 等待正在执行的任务完成，然后关闭执行器
-        os.Exit(0)        // 4. 正常退出（退出码 0 = 一切顺利）
+
+        // 超时 context 限制优雅退出最长 5 秒，性能对冲防止进程挂起
+        shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer shutdownCancel()
+
+        // 1. 关闭 HTTP(S) 服务器
+        if cfg.Server.API.Enabled {
+            if err := srv.Shutdown(shutdownCtx); err != nil {
+                log.Error().Err(err).Msg("HTTP 服务器优雅关闭失败")
+            } else {
+                log.Info().Msg("HTTP 服务器已安全关闭")
+            }
+        }
+
+        // 2. 发送信号让执行器停止接收新任务
+        cancel()
+
+        // 3. 停掉调度引擎（不再触发新任务）
+        engine.Stop()
+
+        // 4. 等待正在执行的任务完成，然后关闭执行器
+        exec.Shutdown()
+
+        // 5. 优雅关闭 SQLite 物理连接
+        sqlDB, err := database.DB.DB()
+        if err == nil && sqlDB != nil {
+            if err := sqlDB.Close(); err != nil {
+                log.Error().Err(err).Msg("数据库连接关闭失败")
+            } else {
+                log.Info().Msg("数据库连接已安全关闭")
+            }
+        }
+
+        os.Exit(0)
     }()
 
-    // --- 第12步：判断运行模式 ---
-    // 根据配置文件判断程序以什么模式运行：
-    //   full      = API 和网页界面都开启（完整功能）
-    //   api-only  = 只开启 API 接口，不提供网页界面（给其他程序调用）
-    //   headless  = 都不开启，只跑后台任务调度（像一个安静的后台工人）
+    // --- 第13步：判断运行模式 ---
     mode := "full"
     if !cfg.Server.WebUI.Enabled && cfg.Server.API.Enabled {
         mode = "api-only"
@@ -327,33 +359,25 @@ func runServe(cmd *cobra.Command, args []string) {
     }
     log.Info().Str("mode", mode).Int("port", cfg.Server.Port).Msg("服务器正在启动...")
 
-    // --- 第13步：启动 HTTP(S) 服务器 ---
-    // fmt.Sprintf(":%d", cfg.Server.Port) 把端口号拼成地址字符串
-    // 例如端口号 8080 会变成 ":8080"（冒号表示监听所有网络接口）
-    addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-
     if cfg.Server.API.Enabled {
-        // API 模式已启用，启动 HTTP 服务器
-        if cfg.Server.TLS.Enabled && cfg.Server.TLS.CertFile != "" && cfg.Server.TLS.KeyFile != "" {
-            // 如果配置了 TLS（加密传输），启动 HTTPS 服务器
-            // HTTPS = HTTP + SSL/TLS 加密，数据在网络上传输时别人看不到内容
-            // 浏览器地址栏会显示小锁图标
-            log.Info().Str("mode", mode).Int("port", cfg.Server.Port).Msg("正在启动 HTTPS 加密服务器...")
-            if err := r.RunTLS(addr, cfg.Server.TLS.CertFile, cfg.Server.TLS.KeyFile); err != nil {
-                log.Fatal().Err(err).Msg("HTTPS 服务器启动失败")
+        // API 模式已启用，异步启动 HTTP/HTTPS 服务器
+        go func() {
+            var err error
+            if cfg.Server.TLS.Enabled && cfg.Server.TLS.CertFile != "" && cfg.Server.TLS.KeyFile != "" {
+                log.Info().Str("mode", mode).Int("port", cfg.Server.Port).Msg("正在启动 HTTPS 加密服务器...")
+                err = srv.ListenAndServeTLS(cfg.Server.TLS.CertFile, cfg.Server.TLS.KeyFile)
+            } else {
+                log.Info().Str("mode", mode).Int("port", cfg.Server.Port).Msg("正在启动 HTTP 服务器...")
+                err = srv.ListenAndServe()
             }
-        } else {
-            // 没有配置 TLS，启动普通 HTTP 服务器
-            log.Info().Str("mode", mode).Int("port", cfg.Server.Port).Msg("正在启动 HTTP 服务器...")
-            if err := r.Run(addr); err != nil {
+            if err != nil && err != http.ErrServerClosed {
                 log.Fatal().Err(err).Msg("HTTP 服务器启动失败")
             }
-        }
+        }()
+        
+        // 阻塞主进程以等待优雅退出信号
+        select {}
     } else {
-        // Headless 模式：不启动 HTTP 服务器，只跑后台调度
-        // select {} 是一个空的阻塞语句，让程序"发呆"等待
-        // 实际上程序会一直运行，直到收到退出信号（Ctrl+C）
-        // 如果没有这行，程序会直接走到末尾然后退出
         log.Info().Msg("Headless 模式 - 不启动网页服务器，仅在后台执行定时任务")
         select {}
     }

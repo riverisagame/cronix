@@ -79,7 +79,7 @@
         :row-class-name="rowClass" 动态设置每一行的 CSS 类名：
           已禁用的任务行会加上 disabled-row 类（透明度降低，视觉上变灰）
       -->
-      <el-table :data="tasks" stripe v-loading="loading" :row-class-name="rowClass">
+      <el-table v-if="viewMode === 'table'" :data="tasks" stripe v-loading="loading" :row-class-name="rowClass">
         <!-- ID 列，宽度 60px -->
         <el-table-column prop="id" label="ID" width="60" />
 
@@ -197,15 +197,115 @@
         </el-table-column>
       </el-table>
 
-      <!--
-        分页组件
-        v-model:current-page="page" 双向绑定当前页码
-        :total="total" 数据总条数（后端返回的）
-        :page-size="20" 每页显示 20 条
-        layout="total,prev,pager,next" 布局：显示"共X条"、上一页、页码、下一页
-        @current-change="load" 页码变化时重新加载数据
-      -->
-      <div style="margin-top:16px;text-align:right">
+      <!-- 拓扑依赖网络 DAG 视图 (原生无依赖 SVG 方案) -->
+      <!-- @Ref: docs/sps/plans/20260527_topology_shutdown_plan.md | @Date: 2026-05-27 -->
+      <div v-else class="topology-container" v-loading="loading">
+        <div class="topology-wrapper">
+          <svg :width="layoutData.width" :height="layoutData.height" style="background:transparent">
+            <!-- 关系流向箭头与特效 -->
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="rgba(255,255,255,0.15)" />
+              </marker>
+              <marker id="arrow-active" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#10b981" />
+              </marker>
+              <filter id="neon-glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            <!-- 激光依赖边 (Glow Path) -->
+            <g>
+              <path
+                v-for="(edge, i) in layoutData.edges"
+                :key="'edge-'+i"
+                :d="`M ${edge.fromX} ${edge.fromY} C ${(edge.fromX + edge.toX)/2} ${edge.fromY}, ${(edge.fromX + edge.toX)/2} ${edge.toY}, ${edge.toX} ${edge.toY}`"
+                fill="none"
+                :class="[edge.active ? 'neon-line-active' : 'neon-line']"
+                :marker-end="edge.active ? 'url(#arrow-active)' : 'url(#arrow)'"
+              />
+            </g>
+
+            <!-- 节点容器 (Nodes) -->
+            <g
+              v-for="node in layoutData.nodes"
+              :key="'node-'+node.id"
+              :transform="`translate(${node.x}, ${node.y})`"
+              @mouseenter="hoveredNodeId = node.id"
+              @mouseleave="hoveredNodeId = null"
+              style="cursor:pointer"
+            >
+              <!-- 节点背景毛玻璃底板 -->
+              <rect
+                width="160"
+                height="60"
+                rx="6"
+                class="glass-node-rect"
+                :class="{ 'node-hovered': hoveredNodeId === node.id }"
+                @click="showLogs(node)"
+                @dblclick="router.push('/tasks/' + node.id)"
+              />
+
+              <!-- 状态呼吸灯圆点 -->
+              <circle
+                cx="18"
+                cy="20"
+                r="4.5"
+                :class="[node.enabled ? 'active-dot' : 'inactive-dot']"
+              />
+
+              <!-- 节点 ID 数显 -->
+              <text
+                x="30"
+                y="24"
+                class="node-id"
+              >#{{ node.id }}</text>
+
+              <!-- 节点任务名称 -->
+              <text
+                x="16"
+                y="46"
+                class="node-name"
+              >{{ truncateName(node.name) }}</text>
+
+              <!-- 类型状态徽章 -->
+              <rect
+                x="105"
+                y="10"
+                width="45"
+                height="16"
+                rx="3"
+                class="type-tag-rect"
+                :class="node.task_type"
+              />
+              <text
+                x="127"
+                y="21"
+                class="type-tag-text"
+              >{{ node.task_type.slice(0, 4).toUpperCase() }}</text>
+
+              <!-- 内置单击手动触发逻辑 -->
+              <g
+                class="quick-run-btn"
+                @click.stop="runTask(node)"
+                :class="{ 'btn-loading': runningId === node.id }"
+                transform="translate(132, 34)"
+              >
+                <circle cx="10" cy="10" r="8" class="run-circle" />
+                <polygon points="8,6 14,10 8,14" class="run-polygon" />
+              </g>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 分页组件 -->
+      <div v-if="viewMode === 'table'" style="margin-top:16px;text-align:right">
         <el-pagination v-model:current-page="page" :total="total" :page-size="20" layout="total,prev,pager,next" @current-change="load" />
       </div>
     </el-card>
@@ -273,7 +373,7 @@
 
 <script setup lang="ts">
 // 导入 Vue 的响应式工具
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 // 导入路由工具
 import { useRouter } from 'vue-router'
 // 导入任务 API 函数
@@ -285,6 +385,155 @@ import { ElMessage } from 'element-plus'
 
 // 获取路由跳转工具
 const router = useRouter()
+
+// 视图切换状态：'table' 列表视图，'topology' 依赖拓扑图视图
+// @Ref: docs/sps/plans/20260527_topology_shutdown_plan.md | @Date: 2026-05-27
+const viewMode = ref<'table' | 'topology'>('table')
+const hoveredNodeId = ref<number | null>(null)
+
+// 切换视图模式，并重置分页拉取数据
+function toggleView() {
+  viewMode.value = viewMode.value === 'table' ? 'topology' : 'table'
+  page.value = 1
+  load()
+}
+
+// 辅助名字截断函数
+function truncateName(name: string) {
+  return name.length > 13 ? name.slice(0, 11) + '..' : name
+}
+
+// Kahn 算法简易分层排版拓扑数据计算属性，对冲循环依赖与大量节点拉取
+// @Ref: docs/sps/plans/20260527_topology_shutdown_plan.md | @Date: 2026-05-27
+const layoutData = computed(() => {
+  if (tasks.value.length === 0) return { nodes: [], edges: [], width: 800, height: 500 }
+
+  // 1. 构建节点映射
+  const nodeMap = new Map<number, any>()
+  tasks.value.forEach(t => {
+    nodeMap.set(t.id, {
+      ...t,
+      level: 0,
+      x: 0,
+      y: 0
+    })
+  })
+
+  // 2. 建立有向依赖图邻接表与入度信息
+  const inDegree = new Map<number, number>()
+  const adj = new Map<number, number[]>()
+  tasks.value.forEach(t => {
+    inDegree.set(t.id, 0)
+    adj.set(t.id, [])
+  })
+
+  tasks.value.forEach(t => {
+    if (t.depends_on_ids) {
+      t.depends_on_ids.forEach((depId: number) => {
+        if (nodeMap.has(depId)) {
+          // depId 指向 t.id
+          adj.get(depId)!.push(t.id)
+          inDegree.set(t.id, (inDegree.get(t.id) || 0) + 1)
+        }
+      })
+    }
+  })
+
+  // 3. 执行层级划分
+  const queue: number[] = []
+  inDegree.forEach((deg, id) => {
+    if (deg === 0) queue.push(id)
+  })
+
+  const levels = new Map<number, number>()
+  tasks.value.forEach(t => levels.set(t.id, 0))
+
+  let count = 0
+  // 设置最大处理上限，防止循环依赖导致栈溢出
+  while (queue.length > 0 && count < tasks.value.length * 2) {
+    const curr = queue.shift()!
+    count++
+    const currLevel = levels.get(curr) || 0
+    const neighbors = adj.get(curr) || []
+    
+    neighbors.forEach(next => {
+      const nextLevel = Math.max(levels.get(next) || 0, currLevel + 1)
+      levels.set(next, nextLevel)
+      inDegree.set(next, inDegree.get(next)! - 1)
+      if (inDegree.get(next) === 0) {
+        queue.push(next)
+      }
+    })
+  }
+
+  // 4. 将节点分配入层级组
+  const levelGroups: Map<number, number[]> = new Map()
+  levels.forEach((lvl, id) => {
+    const safeLvl = Math.min(lvl, 9) // 限制深度，对冲超长画布
+    if (!levelGroups.has(safeLvl)) {
+      levelGroups.set(safeLvl, [])
+    }
+    levelGroups.get(safeLvl)!.push(id)
+  })
+
+  // 排版定位参数
+  const nodeWidth = 160
+  const nodeHeight = 60
+  const gapX = 230
+  const gapY = 90
+  const paddingX = 40
+  const paddingY = 45
+
+  const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => a - b)
+  const nodes: any[] = []
+
+  sortedLevels.forEach(lvl => {
+    const ids = levelGroups.get(lvl) || []
+    ids.forEach((id, idx) => {
+      const node = nodeMap.get(id)
+      if (node) {
+        node.level = lvl
+        node.x = paddingX + lvl * gapX
+        node.y = paddingY + idx * gapY
+        nodes.push(node)
+      }
+    })
+  })
+
+  // 5. 计算连接边线并标记激活态
+  const edges: any[] = []
+  tasks.value.forEach(t => {
+    if (t.depends_on_ids) {
+      t.depends_on_ids.forEach((depId: number) => {
+        const fromNode = nodes.find(n => n.id === depId)
+        const toNode = nodes.find(n => n.id === t.id)
+        if (fromNode && toNode) {
+          const active = hoveredNodeId.value === depId || hoveredNodeId.value === t.id
+          edges.push({
+            fromId: depId,
+            toId: t.id,
+            fromX: fromNode.x + nodeWidth,
+            fromY: fromNode.y + nodeHeight / 2,
+            toX: toNode.x,
+            toY: toNode.y + nodeHeight / 2,
+            active
+          })
+        }
+      })
+    }
+  })
+
+  // 6. SVG 画布视口尺寸动态分配
+  const maxX = nodes.reduce((max, n) => Math.max(max, n.x + nodeWidth), 0) + paddingX
+  const maxY = nodes.reduce((max, n) => Math.max(max, n.y + nodeHeight), 0) + paddingY
+
+  return {
+    nodes,
+    edges,
+    width: Math.max(maxX, 900),
+    height: Math.max(maxY, 450)
+  }
+})
 
 // ---- 以下都是"响应式数据"，数据变化时页面自动更新 ----
 
@@ -343,11 +592,11 @@ function rowClass({ row }: any) { return row.enabled ? '' : 'disabled-row' }
  * 注意：类型筛选如果不是空字符串，还会传给后端做精确过滤。
  */
 async function load() {
-  // 开始加载，显示表格加载动画
   loading.value = true
   try {
-    // 调用 taskAPI.list 发起 GET 请求
-    const r = await taskAPI.list({ page:page.value, page_size:20, search:search.value })
+    // 拓扑图需要全局完整的依赖关系数据，批量拉取 1000 个以防止 429 限流
+    const pageSize = viewMode.value === 'topology' ? 1000 : 20
+    const r = await taskAPI.list({ page:page.value, page_size:pageSize, search:search.value })
     // 把后端返回的 items 数组赋值给 tasks（没有则用空数组）
     tasks.value = r.data.data.items || []
     // 把后端返回的总条数赋值给 total（没有则显示 0）
@@ -421,8 +670,156 @@ onMounted(load)
 <style scoped>
 /*
   scoped 属性表示这些样式只对当前组件有效，不会影响其他页面。
-  :deep() 是 Vue 的"深度选择器"，用于穿透子组件的封装，选中 ElementPlus 表格内部的行元素。
-  .disabled-row 把禁用的任务行透明度设为 0.4（看起来暗淡模糊，一眼就知道是停用的任务）。
+  :deep() 是 Vue 的"深度选择器"，用于穿透子组件的封装，选中 ElementPlus 表格内部 of 行元素。
 */
 :deep(.disabled-row) { opacity: 0.4; }
+
+/* 拓扑视图容器样式，带有嵌入阴影，对冲溢出 */
+.topology-container {
+  width: 100%;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(10, 15, 30, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+  padding: 15px;
+}
+.topology-wrapper {
+  min-width: 100%;
+  display: inline-block;
+}
+
+/* 连线基本态与荧光流动激活态 */
+.neon-line {
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1.5px;
+  transition: stroke 0.3s, stroke-width 0.3s;
+}
+.neon-line-active {
+  stroke: #10b981;
+  stroke-width: 2.5px;
+  filter: url(#neon-glow);
+  stroke-dasharray: 6, 4;
+  animation: strokeDash 1.2s linear infinite;
+  transition: all 0.3s;
+}
+@keyframes strokeDash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+/* 节点背景毛玻璃底板 */
+.glass-node-rect {
+  fill: rgba(20, 27, 45, 0.85);
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1px;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-node-rect:hover, .node-hovered {
+  fill: rgba(25, 35, 60, 0.95);
+  stroke: rgba(16, 185, 129, 0.8);
+  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.35));
+}
+
+/* 节点内元素 */
+.node-id {
+  font-family: var(--cyber-font-mono, monospace);
+  font-size: 11px;
+  fill: rgba(255, 255, 255, 0.4);
+}
+.node-name {
+  font-size: 13px;
+  fill: #e2e8f0;
+  font-weight: 500;
+}
+
+/* 状态指示点 */
+.active-dot {
+  fill: #10b981;
+  filter: drop-shadow(0 0 3px #10b981);
+  animation: pulseGreen 2s infinite;
+}
+.inactive-dot {
+  fill: #64748b;
+}
+@keyframes pulseGreen {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* 任务类型标签 */
+.type-tag-rect {
+  fill: rgba(255, 255, 255, 0.05);
+  stroke-width: 1px;
+}
+.type-tag-rect.shell { stroke: rgba(14, 165, 233, 0.5); fill: rgba(14, 165, 233, 0.1); }
+.type-tag-rect.http { stroke: rgba(16, 185, 129, 0.5); fill: rgba(16, 185, 129, 0.1); }
+.type-tag-rect.cleanup { stroke: rgba(245, 158, 11, 0.5); fill: rgba(245, 158, 11, 0.1); }
+.type-tag-rect.healthcheck { stroke: rgba(100, 116, 139, 0.5); fill: rgba(100, 116, 139, 0.1); }
+
+.type-tag-text {
+  font-family: var(--cyber-font-mono, monospace);
+  font-size: 9px;
+  fill: #c8d3e6;
+  text-anchor: middle;
+}
+
+/* 快捷执行按钮 */
+.quick-run-btn {
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+.quick-run-btn:hover {
+  opacity: 1;
+}
+.run-circle {
+  fill: rgba(255, 255, 255, 0.08);
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 1px;
+  transition: all 0.2s;
+}
+.quick-run-btn:hover .run-circle {
+  fill: rgba(16, 185, 129, 0.2);
+  stroke: #10b981;
+}
+.run-polygon {
+  fill: rgba(255, 255, 255, 0.6);
+  transition: fill 0.2s;
+}
+.quick-run-btn:hover .run-polygon {
+  fill: #10b981;
+}
+/* 按钮 Loading 旋转 */
+.btn-loading {
+  animation: rotateBtn 1s linear infinite;
+  opacity: 1;
+}
+.btn-loading .run-circle {
+  stroke: #e6a23c;
+  stroke-dasharray: 25, 25;
+}
+.btn-loading .run-polygon {
+  display: none;
+}
+@keyframes rotateBtn {
+  from { transform: translate(132px, 34px) rotate(0deg); }
+  to { transform: translate(132px, 34px) rotate(360deg); }
+}
+
+/* 查看历史日志抽屉深度美化 */
+:deep(.el-drawer) {
+  background: rgba(15, 23, 42, 0.95) !important;
+  backdrop-filter: blur(15px);
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+}
+:deep(.el-drawer__title) {
+  color: #f1f5f9 !important;
+  font-weight: 600;
+}
+:deep(.el-timeline-item__node) {
+  box-shadow: 0 0 8px currentColor;
+}
 </style>

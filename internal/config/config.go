@@ -414,11 +414,14 @@ func Load(configPath string) (*Config, error) {
         var newCfg Config
         if err := v.Unmarshal(&newCfg); err == nil {
             // 验证新配置
-            if err := newCfg.Validate(); err == nil {
-                // 验证通过，替换当前配置
-                // *AppConfig = newCfg 把 newCfg 的内容复制到 AppConfig 指向的地址
-                *AppConfig = newCfg
-            }
+			if err := newCfg.Validate(); err == nil {
+				// 防止 fsnotify 写入竞态导致的 JWTSecret 被空值覆盖
+				if newCfg.Auth.JWTSecret == "" && AppConfig != nil {
+					newCfg.Auth.JWTSecret = AppConfig.Auth.JWTSecret
+				}
+				// *AppConfig = newCfg 把 newCfg 的内容复制到 AppConfig 指向的地址
+				*AppConfig = newCfg
+			}
             // 如果解析或验证失败，静默忽略（保留旧配置继续用）
         }
     })

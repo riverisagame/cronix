@@ -12,7 +12,8 @@
       <el-button size="small" @click="exportLogs('json')" :loading="exporting" :disabled="exporting">Export JSON</el-button>
     </h2>
 
-    <el-card shadow="hover" v-loading="loading">
+    <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+    <el-card shadow="hover" class="glass-card" v-loading="loading">
       <el-row :gutter="16" style="margin-bottom:16px">
         <el-col :span="6">
           <el-input v-model="filters.task_name" placeholder="Task name..." clearable @keyup.enter="load">
@@ -127,7 +128,11 @@ function formatTime(iso: string): string {
 }
 
 const columns: Column<any>[] = [
-  { key: 'id', title: 'ID', width: 60, dataKey: 'id' },
+  /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
+  {
+    key: 'id', title: 'ID', width: 60, dataKey: 'id',
+    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad' }, cellData)
+  },
   { key: 'task_name', title: 'Task', width: 140, dataKey: 'task_name' },
   { key: 'group_name', title: 'Group', width: 110, dataKey: 'group_name' },
   {
@@ -141,9 +146,12 @@ const columns: Column<any>[] = [
   { key: 'trigger_type', title: 'Trigger', width: 80, dataKey: 'trigger_type' },
   {
     key: 'start_time', title: 'Time', width: 160, dataKey: 'start_time',
-    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-size:12px' }, formatTime(cellData))
+    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#8a8d98' }, formatTime(cellData))
   },
-  { key: 'exit_code', title: 'Exit', width: 60, dataKey: 'exit_code' },
+  {
+    key: 'exit_code', title: 'Exit', width: 60, dataKey: 'exit_code',
+    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad' }, cellData !== null ? String(cellData) : '-')
+  },
   {
     key: 'error_msg', title: 'Preview', width: 220, dataKey: 'error_msg',
     cellRenderer: ({ cellData, rowData }: any) => {
@@ -151,13 +159,13 @@ const columns: Column<any>[] = [
       const errMsg = cellData || ''
       if (output) {
         const text = output.length > 80 ? output.substring(0, 80) + '...' : output
-        return h('code', { style: 'font-size:12px;color:var(--el-text-color-regular)' }, text)
+        return h('code', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad' }, text)
       }
       if (errMsg) {
         const text = errMsg.length > 80 ? errMsg.substring(0, 80) + '...' : errMsg
-        return h('code', { style: 'font-size:12px;color:#F56C6C' }, text)
+        return h('code', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:var(--cyber-red)' }, text)
       }
-      return h('span', { style: 'color:#c0c4cc' }, '-')
+      return h('span', { style: 'color:#5c5e66' }, '-')
     }
   },
 ]

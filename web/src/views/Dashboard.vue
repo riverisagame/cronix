@@ -21,10 +21,8 @@
         整个行被分成 24 份，span 就是占几份。
       -->
       <el-col :span="6">
-        <!--
-          el-card：卡片容器，shadow="hover" 表示鼠标悬停时显示阴影效果
-        -->
-        <el-card shadow="hover">
+        <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+        <el-card shadow="hover" class="glass-card">
           <!-- 卡片内部用 flex 布局：图标在左，文字在右，中间有 16px 间距 -->
           <div style="display:flex;align-items:center;gap:16px">
             <!--
@@ -40,7 +38,7 @@
                 || 0 的意思是：如果 stats.total_tasks 不存在（undefined/null），就显示 0
                 这是防止页面在数据还没加载完时显示空白
               -->
-              <div style="font-size:28px;font-weight:700;color:#303133">{{ stats.total_tasks || 0 }}</div>
+              <div style="font-size:28px;font-weight:700;color:#e5e7eb;font-family:var(--cyber-font-mono)">{{ stats.total_tasks || 0 }}</div>
             </div>
           </div>
         </el-card>
@@ -48,13 +46,14 @@
 
       <!-- 第二张卡片：Enabled（已启用的任务数），绿色图标 -->
       <el-col :span="6">
-        <el-card shadow="hover">
+        <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+        <el-card shadow="hover" class="glass-card">
           <div style="display:flex;align-items:center;gap:16px">
-            <!-- CircleCheck 对勾图标，绿色 #67C23A -->
-            <el-icon :size="28" color="#67C23A"><CircleCheck /></el-icon>
+            <!-- CircleCheck 对勾图标，绿色 #10b981 -->
+            <el-icon :size="28" color="var(--cyber-green)"><CircleCheck /></el-icon>
             <div>
               <div style="font-size:12px;color:#909399">Enabled</div>
-              <div style="font-size:28px;font-weight:700;color:#67C23A">{{ stats.enabled_tasks || 0 }}</div>
+              <div style="font-size:28px;font-weight:700;color:var(--cyber-green);font-family:var(--cyber-font-mono)">{{ stats.enabled_tasks || 0 }}</div>
             </div>
           </div>
         </el-card>
@@ -62,13 +61,14 @@
 
       <!-- 第三张卡片：Today Runs（今日运行次数），橙色图标 -->
       <el-col :span="6">
-        <el-card shadow="hover">
+        <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+        <el-card shadow="hover" class="glass-card">
           <div style="display:flex;align-items:center;gap:16px">
-            <!-- Timer 时钟图标，橙色 #E6A23C -->
-            <el-icon :size="28" color="#E6A23C"><Timer /></el-icon>
+            <!-- Timer 时钟图标，橙色 #f59e0b -->
+            <el-icon :size="28" color="#f59e0b"><Timer /></el-icon>
             <div>
               <div style="font-size:12px;color:#909399">Today Runs</div>
-              <div style="font-size:28px;font-weight:700;color:#E6A23C">{{ stats.today_total || 0 }}</div>
+              <div style="font-size:28px;font-weight:700;color:#f59e0b;font-family:var(--cyber-font-mono)">{{ stats.today_total || 0 }}</div>
             </div>
           </div>
         </el-card>
@@ -79,7 +79,8 @@
         颜色是动态的：如果有失败就用红色，没有失败就用绿色（表示一切正常）
       -->
       <el-col :span="6">
-        <el-card shadow="hover">
+        <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+        <el-card shadow="hover" class="glass-card">
           <div style="display:flex;align-items:center;gap:16px">
             <!--
               WarningFilled 警告图标
@@ -89,7 +90,7 @@
             <div>
               <div style="font-size:12px;color:#909399">Failures</div>
               <!-- 数字颜色也是动态的，和图标颜色保持一致 -->
-              <div style="font-size:28px;font-weight:700" :style="{color: failColor}">{{ stats.today_failed || 0 }}</div>
+              <div style="font-size:28px;font-weight:700;font-family:var(--cyber-font-mono)" :style="{color: failColor}">{{ stats.today_failed || 0 }}</div>
             </div>
           </div>
         </el-card>
@@ -102,7 +103,8 @@
     <el-row :gutter="20">
       <!-- 左侧：成功率卡片，占 8/24（三分之一） -->
       <el-col :span="8">
-        <el-card shadow="hover">
+        <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+        <el-card shadow="hover" class="glass-card">
           <!--
             #header 是 el-card 的"插槽"（slot），用于自定义卡片的标题区域
             Vue 中的插槽（slot）可以理解为"预留的空位"，让使用者自定义某一块的内容
@@ -131,7 +133,7 @@
               -->
               <template #default="{ percentage }">
                 <!-- 在进度环中间显示大号百分比数字 -->
-                <span style="font-size:28px;font-weight:700;color:#303133">{{ percentage }}%</span>
+                <span style="font-size:28px;font-weight:700;color:#e5e7eb;font-family:var(--cyber-font-mono)">{{ percentage }}%</span>
               </template>
             </el-progress>
           </div>
@@ -140,7 +142,8 @@
 
       <!-- 右侧：最近执行记录表格，占 16/24（三分之二） -->
       <el-col :span="16">
-        <el-card shadow="hover">
+        <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+        <el-card shadow="hover" class="glass-card">
           <template #header>
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span style="font-weight:600">Recent Executions</span>
@@ -193,7 +196,7 @@
             -->
             <el-table-column label="Time" width="100">
               <template #default="{ row }">
-                <span style="font-size:12px;color:#909399">{{ row.start_time?.substring(11,19) }}</span>
+                <span style="font-size:12px;color:#8a8d98;font-family:var(--cyber-font-mono)">{{ row.start_time?.substring(11,19) }}</span>
               </template>
             </el-table-column>
 
@@ -208,7 +211,7 @@
                   substring(0, 100) 截取前 100 个字符，超出部分省略
                   如果没有输出内容，显示 '-' 占位符
                 -->
-                <code style="font-size:12px;color:#606266">{{ row.output?.substring(0, 100) || '-' }}</code>
+                <code style="font-size:12px;color:#a3a6ad;font-family:var(--cyber-font-mono)">{{ row.output?.substring(0, 100) || '-' }}</code>
               </template>
             </el-table-column>
           </el-table>
@@ -266,7 +269,7 @@ const successRate = computed(() => {
  * failColor 是一个"计算属性"。
  * 它决定失败数字的颜色：如果有失败（>0）显示红色，没有则显示绿色（表示一切正常）。
  */
-const failColor = computed(() => (stats.value.today_failed || 0) > 0 ? '#F56C6C' : '#67C23A')
+const failColor = computed(() => (stats.value.today_failed || 0) > 0 ? 'var(--cyber-red)' : 'var(--cyber-green)')
 
 /**
  * progressColor 是一个"计算属性"。

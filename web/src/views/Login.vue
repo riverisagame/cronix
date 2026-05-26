@@ -10,14 +10,15 @@
     登录页整体是一个居中的容器：
     - display:flex + justify-content:center + align-items:center 让登录卡片在屏幕正中央
     - height:100vh 占满整个浏览器窗口高度
-    - background:#141414 深色背景，和整体暗色主题一致
+    - background:radial-gradient 深色背景，和整体暗色主题一致
   -->
-  <div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#141414">
+  <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
+  <div style="display:flex;justify-content:center;align-items:center;height:100vh;background:radial-gradient(circle at center, #161823 0%, #0c0d12 100%)">
     <!--
-      el-card：ElementPlus 的"卡片"组件，像一个带边框和阴影的白色面板
+      el-card：ElementPlus 的"卡片"组件，这里被磨砂玻璃化
       style="width:400px" 卡片宽度固定 400 像素
     -->
-    <el-card style="width:400px">
+    <el-card class="glass-card" style="width:400px">
       <!-- 标题：Cronix Login，深色文字，居中显示 -->
       <h2 style="text-align:center;margin-bottom:24px;color:#e5e7eb">Cronix Login</h2>
 
