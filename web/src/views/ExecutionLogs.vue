@@ -181,17 +181,17 @@ async function clearAllLogs() {
   } finally { clearing.value = false }
 }
 
-async function showDetail(row: any) {
+async function showDetail({ rowData }: any) {
   drawerVisible.value = true
   detail.value = null
   detailLoading.value = true
   showFullOutput.value = false
   try {
-    const r = await logAPI.getLog(row.id)
+    const r = await logAPI.getLog(rowData.id)
     detail.value = r.data.data
   } catch {
     // Fallback: use list row data (no output available)
-    detail.value = row
+    detail.value = rowData
   } finally { detailLoading.value = false }
 }
 

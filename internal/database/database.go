@@ -134,9 +134,13 @@ func Init(dbPath string) error {
     sqlDB.SetMaxOpenConns(1)
 
     // WAL mode: better concurrent read/write performance
-    db.Exec("PRAGMA journal_mode=WAL")
+    if err := db.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
+        log.Warn().Err(err).Msg("failed to set WAL mode")
+    }
     // NORMAL sync is safe in WAL mode, much faster than FULL
-    db.Exec("PRAGMA synchronous=NORMAL")
+    if err := db.Exec("PRAGMA synchronous=NORMAL").Error; err != nil {
+        log.Warn().Err(err).Msg("failed to set synchronous=NORMAL")
+    }
 
     // --- 第4步：自动建表/更新表结构（AutoMigrate）---
 
@@ -163,11 +167,17 @@ func Init(dbPath string) error {
     }
 
     // Indexes for log cleanup and query performance
-    db.Exec("CREATE INDEX IF NOT EXISTS idx_el_created_at ON execution_logs(created_at)")
-    db.Exec("CREATE INDEX IF NOT EXISTS idx_el_task_start ON execution_logs(task_id, start_time)")
-    db.Exec("CREATE INDEX IF NOT EXISTS idx_el_status_start ON execution_logs(status, start_time)")
-    db.Exec("CREATE INDEX IF NOT EXISTS idx_gel_created_at ON group_execution_logs(created_at)")
-    db.Exec("CREATE INDEX IF NOT EXISTS idx_gel_group_start ON group_execution_logs(group_id, start_time)")
+    for _, idx := range []string{
+        "CREATE INDEX IF NOT EXISTS idx_el_created_at ON execution_logs(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_el_task_start ON execution_logs(task_id, start_time)",
+        "CREATE INDEX IF NOT EXISTS idx_el_status_start ON execution_logs(status, start_time)",
+        "CREATE INDEX IF NOT EXISTS idx_gel_created_at ON group_execution_logs(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_gel_group_start ON group_execution_logs(group_id, start_time)",
+    } {
+        if err := db.Exec(idx).Error; err != nil {
+            log.Warn().Err(err).Str("sql", idx).Msg("failed to create index")
+        }
+    }
 
     // --- 第5步：把连接对象保存到全局变量 ---
 

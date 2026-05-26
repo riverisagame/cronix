@@ -58,22 +58,18 @@ func (s *GroupService) UpdateGroup(id uint, updates map[string]interface{}) erro
 }
 
 func (s *GroupService) DeleteGroup(id uint) (int64, int64, error) {
-    // Count tasks before disassociating
-    var taskCount int64
-    s.DB.Model(&model.Task{}).Where("group_id = ?", id).Count(&taskCount)
+    var taskCount, logCount int64
 
-    // Count logs before deleting
-    var logCount int64
-    s.DB.Model(&model.GroupExecutionLog{}).Where("group_id = ?", id).Count(&logCount)
-
-    // Disassociate tasks (keep them, just remove group link)
-    s.DB.Model(&model.Task{}).Where("group_id = ?", id).Update("group_id", nil)
-
-    // Delete group execution logs
-    s.DB.Where("group_id = ?", id).Delete(&model.GroupExecutionLog{})
-
-    // Delete the group
-    if err := s.DB.Delete(&model.TaskGroup{}, id).Error; err != nil {
+    err := s.DB.Transaction(func(tx *gorm.DB) error {
+        tx.Model(&model.Task{}).Where("group_id = ?", id).Count(&taskCount)
+        tx.Model(&model.GroupExecutionLog{}).Where("group_id = ?", id).Count(&logCount)
+        tx.Model(&model.Task{}).Where("group_id = ?", id).Update("group_id", nil)
+        if err := tx.Where("group_id = ?", id).Delete(&model.GroupExecutionLog{}).Error; err != nil {
+            return err
+        }
+        return tx.Delete(&model.TaskGroup{}, id).Error
+    })
+    if err != nil {
         return 0, 0, err
     }
     if s.Engine != nil {

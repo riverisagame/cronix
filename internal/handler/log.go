@@ -204,7 +204,9 @@ func (h *LogHandler) ExportLogs(c *gin.Context) {
     c.Header("Content-Type", "text/csv; charset=utf-8")
     c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"cronix-logs-%s.csv\"", date))
     w := csv.NewWriter(c.Writer)
-    w.Write([]string{"id", "task_name", "status", "trigger_type", "start_time", "end_time", "exit_code", "error_msg", "created_at"})
+    if err := w.Write([]string{"id", "task_name", "status", "trigger_type", "start_time", "end_time", "exit_code", "error_msg", "created_at"}); err != nil {
+        return
+    }
     for _, l := range logs {
         endTime := ""
         if l.EndTime != nil {
@@ -214,7 +216,7 @@ func (h *LogHandler) ExportLogs(c *gin.Context) {
         if l.ExitCode != nil {
             exitCode = strconv.Itoa(*l.ExitCode)
         }
-        w.Write([]string{
+        if err := w.Write([]string{
             strconv.FormatUint(uint64(l.ID), 10),
             l.TaskName,
             l.Status,
@@ -224,7 +226,9 @@ func (h *LogHandler) ExportLogs(c *gin.Context) {
             exitCode,
             l.ErrorMsg,
             l.CreatedAt.Format("2006-01-02 15:04:05"),
-        })
+        }); err != nil {
+            return
+        }
     }
     w.Flush()
 }
