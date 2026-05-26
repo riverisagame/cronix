@@ -45,7 +45,7 @@ func SetupRouter(
 
     // 健康检查接口：用于确认服务是否正常运行
     r.GET("/api/health", func(c *gin.Context) {
-        c.JSON(http.StatusOK, gin.H{"status": "healthy", "version": "1.1.0"})
+        c.JSON(http.StatusOK, gin.H{"status": "healthy", "version": "1.7.0"})
     })
 
     // 登录接口：用户输入用户名密码获取令牌
