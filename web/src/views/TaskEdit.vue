@@ -33,7 +33,7 @@
         el-form：表单组件
         :model="form" 把表单数据绑定到 form 响应式对象上
         label-width="140px" 所有标签宽度统一 140 像素（对齐美观）
-        style="max-width:800px" 表单最大宽度 800 像素（太宽了不好看）
+        style="max-width:1100px" 表单最大宽度 800 像素（太宽了不好看）
       -->
       <el-form :model="form" label-width="140px" style="max-width:800px">
         <!--
@@ -56,11 +56,12 @@
         -->
         <el-form-item label="Cron Expression">
           <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）"
+	          <div style="display:flex;flex-direction:column;gap:0">
             @input="onCronInput" />
           <!-- 快捷宏 -->
           <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
             <span v-for="m in cronMacros" :key="m.label"
-              style="cursor:pointer;font-size:11px;padding:1px 6px;border:1px solid #666;border-radius:3px;color:#aaa"
+              style="cursor:pointer;font-size:12px;padding:2px 8px;border:1px solid #555;border-radius:4px;color:#c0c4cc"
               @click="applyMacro(m.value)" :title="m.label + ': ' + m.value">
               {{ m.label }}
             </span>
@@ -68,18 +69,22 @@
           <!-- 字段高亮 -->
           <div v-if="cronFields.length > 0" style="margin-top:6px;display:flex;gap:4px">
             <span v-for="(f, i) in cronFields" :key="i"
-              :style="{background: cronFieldColors[i],color:'#fff',fontSize:'12px',padding:'2px 6px',borderRadius:'3px'}"
+              :style="{background: cronFieldColors[i],color:'#fff',fontSize:'13px',padding:'3px 8px',borderRadius:'4px'}"
               :title="cronFieldLabels[i]">{{ f }}</span>
           </div>
           <!-- 可读说明 + 下次执行 -->
-          <div :style="{fontSize:'12px',color: cronValid ? '#67C23A' : '#F56C6C',marginTop:'4px'}">
+          <div :style="{fontSize:'13px',color: cronValid ? '#67C23A' : '#F56C6C',marginTop:'10px'}">
             {{ cronHint }}
           </div>
-          <div v-if="cronNextRuns.length > 0" style="margin-top:4px;font-size:12px;color:#909399">
-            Next: <span v-for="(t, i) in cronNextRuns" :key="i"
-              style="margin-right:8px;background:#1d1e1f;padding:1px 6px;border-radius:3px">{{ t }}</span>
+          <div v-if="cronNextRuns.length > 0" style="margin-top:10px;font-size:12px;color:#909399">
+            Next:
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">
+              <span v-for="(t, i) in cronNextRuns" :key="i"
+                style="background:#1d1e1f;padding:2px 8px;border-radius:3px;white-space:nowrap">{{ t }}</span>
+            </div>
           </div>
-        </el-form-item>
+        
+	          </div></el-form-item>
 
         <!--
           任务类型：单选按钮组
@@ -127,7 +132,7 @@
 
           <!-- 以哪个用户执行（需配置 sudoers），非必填 -->
           <el-form-item label="Run As User">
-            <el-input v-model="form.run_as" placeholder="Leave empty to run as cronix" />
+            <el-input v-model="form.run_as" placeholder="Default: root" />
           </el-form-item>
         </template>
 
@@ -182,26 +187,18 @@
         -->
         <el-divider content-position="left">Advanced</el-divider>
         <!-- 用 el-row 把两个设置项并排显示 -->
-        <el-row :gutter="20">
-          <!-- 超时时间（秒）：使用数字输入框 el-input-number -->
-          <el-col :span="8">
-            <el-form-item label="Timeout(s)">
-              <!--
-                el-input-number：数字输入框，带有增减按钮
-                :min="1" 最小值 1 秒
-                :max="3600" 最大值 3600 秒（1 小时）
-              -->
-              <el-input-number v-model="form.timeout_sec" :min="1" :max="3600" />
-            </el-form-item>
-          </el-col>
-          <!-- 重试次数：失败后自动重试的次数 -->
-          <el-col :span="8">
-            <el-form-item label="Retry Count">
-              <!-- 最小 0 次（不重试），最大 10 次 -->
-              <el-input-number v-model="form.retry_count" :min="0" :max="10" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <el-form-item label="Timeout(s)">
+            <el-input-number v-model="form.timeout_sec" :min="1" :max="3600" style="width:160px" />
+          </el-form-item>
+          <el-form-item label="Retry Count">
+            <el-input-number v-model="form.retry_count" :min="0" :max="10" style="width:160px" />
+          </el-form-item>
+          <el-form-item label="Retry Interval(s)">
+            <el-input-number v-model="form.retry_interval_sec" :min="0" :max="3600" style="width:160px" />
+          </el-form-item>
+          <el-form-item label="Max Concurrent">
+            <el-input-number v-model="form.max_concurrent" :min="1" :max="100" style="width:160px" />
+          </el-form-item>
 
         <!-- 启用开关 -->
         <el-form-item label="Enabled">
@@ -278,7 +275,7 @@ const saving = ref(false)
  *   enabled: 是否启用，默认 true（启用）
  *   description: 任务描述（空）
  */
-const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'root', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
 const groupList = ref<any[]>([])
 const availableDepTasks = ref<any[]>([])
 

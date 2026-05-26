@@ -6,7 +6,7 @@
     </div>
 
     <el-card shadow="hover" style="margin-bottom:20px">
-      <el-form :model="form" label-width="120px" style="max-width:700px">
+      <el-form :model="form" label-width="120px" style="max-width:1100px">
         <el-form-item label="Name" required>
           <el-input v-model="form.name" placeholder="e.g. daily-backup-pipeline" />
         </el-form-item>
@@ -21,26 +21,31 @@
         </el-form-item>
         <el-form-item label="Cron (optional)">
           <el-input v-model="form.cron_expr" placeholder="0 30 8 * * * — leave empty for manual only" />
+          <div style="display:flex;flex-direction:column;gap:0">
           <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
             <span v-for="m in cronMacros" :key="m.label"
-              style="cursor:pointer;font-size:11px;padding:1px 6px;border:1px solid #666;border-radius:3px;color:#aaa"
+              style="cursor:pointer;font-size:12px;padding:2px 8px;border:1px solid #555;border-radius:4px;color:#c0c4cc"
               @click="form.cron_expr = m.value" :title="m.label + ': ' + m.value">
               {{ m.label }}
             </span>
           </div>
           <div v-if="cronFields.length > 0" style="margin-top:6px;display:flex;gap:4px">
             <span v-for="(f, i) in cronFields" :key="i"
-              :style="{background: cronFieldColors[i],color:'#fff',fontSize:'12px',padding:'2px 6px',borderRadius:'3px'}"
+              :style="{background: cronFieldColors[i],color:'#fff',fontSize:'13px',padding:'3px 8px',borderRadius:'4px'}"
               :title="cronFieldLabels[i]">{{ f }}</span>
           </div>
-          <div :style="{fontSize:'12px',color: cronValid ? '#67C23A' : '#F56C6C',marginTop:'4px'}">
+          <div :style="{fontSize:'13px',color: cronValid ? '#67C23A' : '#F56C6C',marginTop:'10px'}">
             {{ cronHint }}
           </div>
-          <div v-if="cronNextRuns.length > 0" style="margin-top:4px;font-size:12px;color:#909399">
-            Next: <span v-for="(t, i) in cronNextRuns" :key="i"
-              style="margin-right:8px;background:#1d1e1f;padding:1px 6px;border-radius:3px">{{ t }}</span>
+          <div v-if="cronNextRuns.length > 0" style="margin-top:10px;font-size:12px;color:#909399">
+            Next:
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">
+              <span v-for="(t, i) in cronNextRuns" :key="i"
+                style="background:#1d1e1f;padding:2px 8px;border-radius:3px;white-space:nowrap">{{ t }}</span>
+            </div>
           </div>
-        </el-form-item>
+        
+          </div></el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="save">{{ isNew ? 'Create' : 'Save' }}</el-button>
         </el-form-item>
@@ -73,28 +78,33 @@
           <div v-if="form.mode==='sequential'" style="font-size:12px;color:#909399;margin-bottom:8px">
             Drag to reorder — tasks execute from top to bottom
           </div>
-          <div style="border:1px solid #409EFF;border-radius:4px;min-height:200px;max-height:400px;overflow:auto;padding:8px">
+          <div style="border:1px solid #409EFF;border-radius:4px;min-height:200px;max-height:400px;overflow:auto;padding:8px"
+            @dragover.prevent>
+            <TransitionGroup name="member-flip">
             <div v-for="(t, idx) in members" :key="t.id"
               :draggable="form.mode==='sequential'"
               @dragstart="onDragStart($event, idx)"
-              @dragover.prevent="onDragOver($event, idx)"
+              @dragenter.prevent="onDragEnter($event, idx)"
+              @dragleave="onDragLeave($event, idx)"
+              @dragover.prevent
               @drop="onDrop($event, idx)"
-              @dragend="dragIdx = -1"
-              :style="{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 8px',marginBottom:'4px',background: dragIdx === idx ? '#2a3a4a' : '#1a2a3a',borderRadius:'4px',cursor: form.mode==='sequential' ? 'grab' : 'default',opacity: dragIdx === idx ? 0.6 : 1,transition:'all 0.15s'}">
-              <span>
-                <el-tag v-if="form.mode==='sequential'" size="small" type="warning" style="margin-right:6px">{{ idx + 1 }}</el-tag>
+              @dragend="onDragEnd"
+              :style="memberItemStyle(idx)">
+              <span style="display:flex;align-items:center;gap:8px">
+                <el-tag v-if="form.mode==='sequential'" size="small" :type="dragIdx === idx ? 'danger' : 'warning'" style="min-width:24px;text-align:center">{{ idx + 1 }}</el-tag>
                 <span style="font-size:13px">{{ t.name }}</span>
               </span>
               <span style="display:flex;gap:4px">
                 <template v-if="form.mode==='sequential'">
-                  <el-button size="small" :disabled="idx===0" @click="moveMember(idx, -1)" style="padding:2px 6px" title="Move up">↑</el-button>
-                  <el-button size="small" :disabled="idx===members.length-1" @click="moveMember(idx, 1)" style="padding:2px 6px" title="Move down">↓</el-button>
+                  <el-button size="small" :disabled="idx===0" @click="moveMember(idx, -1)" style="padding:2px 8px;font-size:14px" title="Move up">↑</el-button>
+                  <el-button size="small" :disabled="idx===members.length-1" @click="moveMember(idx, 1)" style="padding:2px 8px;font-size:14px" title="Move down">↓</el-button>
                 </template>
                 <el-button size="small" type="danger" circle @click="removeMember(t, idx)">
                   <el-icon><Close /></el-icon>
                 </el-button>
               </span>
             </div>
+            </TransitionGroup>
             <div v-if="members.length===0" style="text-align:center;color:#909399;padding:20px">
               Click tasks on the left to add them
             </div>
@@ -276,16 +286,54 @@ function removeMember(_t: any, idx: number) {
 }
 
 const dragIdx = ref(-1)
-function onDragStart(e: DragEvent, idx: number) { dragIdx.value = idx; e.dataTransfer!.effectAllowed = 'move' }
-function onDragOver(e: DragEvent, idx: number) {
-  if (dragIdx.value < 0 || dragIdx.value === idx) return
-  // Swap the dragged item with the target
-  const arr = members.value
-  const item = arr.splice(dragIdx.value, 1)[0]
-  arr.splice(idx, 0, item)
-  dragIdx.value = idx
-}
-function onDrop(_e: DragEvent, _idx: number) { dragIdx.value = -1 }
+	const dragOverIdx = ref(-1)
+
+	function memberItemStyle(idx: number) {
+	  const isDragging = dragIdx.value === idx
+	  const isOver = dragOverIdx.value === idx && dragIdx.value >= 0 && dragIdx.value !== idx
+	  return {
+	    display:'flex', justifyContent:'space-between', alignItems:'center',
+	    padding:'8px 10px', marginBottom:'4px', borderRadius:'6px',
+	    cursor: form.value.mode==='sequential' ? (isDragging ? 'grabbing' : 'grab') : 'default',
+	    opacity: isDragging ? 0.5 : 1,
+	    background: isDragging ? '#409EFF' : isOver ? '#1a3a5a' : '#1a2a3a',
+	    border: isDragging ? '2px dashed #67C23A' : isOver ? '2px solid #409EFF' : '2px solid transparent',
+	    transform: isDragging ? 'scale(1.03)' : 'scale(1)',
+	    boxShadow: isDragging ? '0 4px 12px rgba(64,158,255,0.4)' : 'none',
+	    transition:'transform 0.15s, box-shadow 0.15s, opacity 0.15s, background 0.15s, border 0.15s',
+	  }
+	}
+
+	function onDragStart(e: DragEvent, idx: number) {
+	  dragIdx.value = idx
+	  if (e.dataTransfer) {
+	    e.dataTransfer.effectAllowed = 'move'
+	    e.dataTransfer.setData('text/plain', String(idx))
+	  }
+	}
+
+	function onDragEnter(_e: DragEvent, idx: number) {
+	  if (dragIdx.value < 0 || dragIdx.value === idx) return
+	  dragOverIdx.value = idx
+	}
+
+	function onDragLeave(_e: DragEvent, idx: number) {
+	  if (dragOverIdx.value === idx) dragOverIdx.value = -1
+	}
+
+	function onDragEnd() {
+	  dragIdx.value = -1
+	  dragOverIdx.value = -1
+	}
+
+	function onDrop(_e: DragEvent, idx: number) {
+	  dragOverIdx.value = -1
+	  if (dragIdx.value < 0 || dragIdx.value === idx) return
+	  const arr = members.value
+	  const item = arr.splice(dragIdx.value, 1)[0]
+	  arr.splice(idx, 0, item)
+	  dragIdx.value = -1
+	}
 function moveMember(idx: number, delta: number) {
   const arr = members.value; const newIdx = idx + delta
   if (newIdx < 0 || newIdx >= arr.length) return
@@ -338,3 +386,12 @@ async function saveMembers() {
   } finally { savingMembers.value = false }
 }
 </script>
+
+<style scoped>
+.member-flip-move {
+  transition: transform 0.3s ease;
+}
+.member-flip-leave-active {
+  display: none;
+}
+</style>
