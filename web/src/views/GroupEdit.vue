@@ -269,7 +269,13 @@ const allTasks = ref<any[]>([])
 
 const availableTasks = computed(() => {
   const memberIds = new Set(members.value.map((m: any) => m.id))
-  let tasks = allTasks.value.filter((t: any) => !memberIds.has(t.id))
+  const currentGroupId = isNew.value ? null : Number(route.params.id)
+  let tasks = allTasks.value.filter((t: any) => {
+    if (memberIds.has(t.id)) return false
+    // 排除已绑定其他组的任务（group_id 非空且不是当前组）
+    if (t.group_id != null && t.group_id !== currentGroupId) return false
+    return true
+  })
   if (taskSearch.value) {
     const q = taskSearch.value.toLowerCase()
     tasks = tasks.filter((t: any) => t.name.toLowerCase().includes(q))
