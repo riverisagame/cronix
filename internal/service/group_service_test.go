@@ -77,7 +77,7 @@ func TestGroupCRUD(t *testing.T) {
     }
 
     // Delete
-    if err := svc.DeleteGroup(g.ID); err != nil {
+    if _, _, err := svc.DeleteGroup(g.ID); err != nil {
         t.Fatalf("delete group: %v", err)
     }
     _, err = svc.GetGroup(g.ID)
@@ -117,7 +117,7 @@ func TestGroupMembers(t *testing.T) {
 
     // Delete group unlinks remaining members
     svc.SetGroupMembers(g.ID, taskIDs)
-    svc.DeleteGroup(g.ID)
+    _, _, _ = svc.DeleteGroup(g.ID)
     var count int64
     db.Model(&model.Task{}).Where("group_id IS NOT NULL").Count(&count)
     if count != 0 {
