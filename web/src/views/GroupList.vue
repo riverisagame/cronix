@@ -30,7 +30,10 @@
             <el-button size="small" type="primary" @click="router.push('/groups/'+row.id)" circle><el-icon><Edit /></el-icon></el-button>
             <el-button size="small" type="success" @click="runGroup(row)" :loading="runningId===row.id" circle><el-icon><VideoPlay /></el-icon></el-button>
             <el-button size="small" @click="showLogs(row)" circle><el-icon><Tickets /></el-icon></el-button>
-            <el-popconfirm title="Delete this group?" @confirm="deleteGroup(row.id)">
+            <el-popconfirm title="Clear all execution logs for this group?" @confirm="clearGroupLogs(row.id)">
+              <template #reference><el-button size="small" type="warning" circle><el-icon><DeleteFilled /></el-icon></el-button></template>
+            </el-popconfirm>
+            <el-popconfirm :title="'Delete group \'' + row.name + '\'? Tasks will be kept, logs cleared.'" @confirm="deleteGroup(row.id, row.name)">
               <template #reference><el-button size="small" type="danger" circle><el-icon><Delete /></el-icon></el-button></template>
             </el-popconfirm>
           </template>
@@ -69,7 +72,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { groupAPI, logAPI } from '../api/index'
-import { Plus, Edit, VideoPlay, Delete, Tickets } from '@element-plus/icons-vue'
+import { Plus, Edit, VideoPlay, Delete, Tickets, DeleteFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
@@ -97,9 +100,14 @@ async function runGroup(row: any) {
   finally { runningId.value = null; load() }
 }
 
-async function deleteGroup(id: number) {
-  await groupAPI.delete(id)
-  ElMessage.success('Deleted')
+async function deleteGroup(id: number, name: string) {
+  try {
+    const r = await groupAPI.delete(id)
+    const d = r.data.data
+    ElMessage.success(`Deleted '${name}': ${d.tasks_affected} task(s) disassociated, ${d.logs_deleted} log(s) cleared`)
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.message || 'Failed')
+  }
   load()
 }
 
