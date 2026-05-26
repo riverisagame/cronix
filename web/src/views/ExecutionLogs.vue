@@ -90,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, h } from 'vue'
 import { ElTableV2 } from 'element-plus'
 import type { Column } from 'element-plus'
 import { logAPI } from '../api/index'
@@ -126,10 +126,8 @@ const columns: Column<any>[] = [
   {
     key: 'status', title: 'Status', width: 100, dataKey: 'status',
     cellRenderer: ({ cellData }: any) => {
-      return (h: any) => {
-        const type = cellData === 'success' ? 'success' : cellData === 'failed' ? 'danger' : 'warning'
-        return h('el-tag', { type, size: 'small' }, () => (cellData || '').toUpperCase())
-      }
+      const type = cellData === 'success' ? 'success' : cellData === 'failed' ? 'danger' : 'warning'
+      return h('el-tag', { type, size: 'small' }, () => (cellData || '').toUpperCase())
     }
   },
   { key: 'trigger_type', title: 'Trigger', width: 80, dataKey: 'trigger_type' },
@@ -138,11 +136,9 @@ const columns: Column<any>[] = [
   {
     key: 'error_msg', title: 'Preview', width: 200, dataKey: 'error_msg',
     cellRenderer: ({ cellData }: any) => {
-      return (h: any) => {
-        if (!cellData) return h('span', { style: 'color:#c0c4cc' }, '-')
-        const text = cellData.length > 80 ? cellData.substring(0, 80) + '...' : cellData
-        return h('code', { style: 'font-size:12px;color:#606266' }, text)
-      }
+      if (!cellData) return h('span', { style: 'color:#c0c4cc' }, '-')
+      const text = cellData.length > 80 ? cellData.substring(0, 80) + '...' : cellData
+      return h('code', { style: 'font-size:12px;color:#606266' }, text)
     }
   },
 ]
