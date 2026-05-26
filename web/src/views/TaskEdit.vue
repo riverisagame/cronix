@@ -56,10 +56,9 @@
         -->
         <el-form-item label="Cron Expression">
           <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）"
-	          <div style="display:flex;flex-direction:column;gap:0">
             @input="onCronInput" />
           <!-- 快捷宏 -->
-          <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
+          <div style="margin-top:10px;display:flex;gap:4px;flex-wrap:wrap">
             <span v-for="m in cronMacros" :key="m.label"
               style="cursor:pointer;font-size:12px;padding:2px 8px;border:1px solid #555;border-radius:4px;color:#c0c4cc"
               @click="applyMacro(m.value)" :title="m.label + ': ' + m.value">
@@ -67,15 +66,16 @@
             </span>
           </div>
           <!-- 字段高亮 -->
-          <div v-if="cronFields.length > 0" style="margin-top:6px;display:flex;gap:4px">
+          <div v-if="cronFields.length > 0" style="margin-top:10px;display:flex;gap:4px">
             <span v-for="(f, i) in cronFields" :key="i"
               :style="{background: cronFieldColors[i],color:'#fff',fontSize:'13px',padding:'3px 8px',borderRadius:'4px'}"
               :title="cronFieldLabels[i]">{{ f }}</span>
           </div>
-          <!-- 可读说明 + 下次执行 -->
+          <!-- 可读说明 -->
           <div :style="{fontSize:'13px',color: cronValid ? '#67C23A' : '#F56C6C',marginTop:'10px'}">
             {{ cronHint }}
           </div>
+          <!-- 下次执行 -->
           <div v-if="cronNextRuns.length > 0" style="margin-top:10px;font-size:12px;color:#909399">
             Next:
             <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">
@@ -83,8 +83,7 @@
                 style="background:#1d1e1f;padding:2px 8px;border-radius:3px;white-space:nowrap">{{ t }}</span>
             </div>
           </div>
-        
-	          </div></el-form-item>
+        </el-form-item>
 
         <!--
           任务类型：单选按钮组
