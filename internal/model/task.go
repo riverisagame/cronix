@@ -147,7 +147,7 @@ type Task struct {
 
     // RunAs 以哪个用户身份执行（仅 Shell 类型生效）
     // 非空时通过 sudo -u <user> 切换用户，需在 sudoers 中授权 cronix 用户
-    // 选填，不写就以 cronix 用户身份执行
+    // 选填，不写默认以 root 身份执行
     RunAs string `json:"run_as,omitempty"`
 
     // CreatedAt 任务创建时间

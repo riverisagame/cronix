@@ -57,7 +57,7 @@
       </div>
     </el-card>
 
-    <el-drawer v-model="drawerVisible" title="Execution Detail" size="650px" direction="rtl">
+    <el-drawer v-model="drawerVisible" title="Execution Detail" size="900px" direction="rtl">
       <div v-if="detailLoading" style="text-align:center;padding:40px;color:#909399" v-loading="true">Loading...</div>
       <template v-else-if="detail">
         <div style="display:flex;gap:10px;margin-bottom:16px">

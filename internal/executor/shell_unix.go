@@ -44,7 +44,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
         // 以指定用户身份执行：sudo -u <user> sh -c "command"
         cmd = exec.CommandContext(tCtx, "sudo", "-u", runAs, "sh", "-c", command)
     } else {
-        cmd = exec.CommandContext(tCtx, "sh", "-c", command)
+        cmd = exec.CommandContext(tCtx, "sudo", "-u", "root", "sh", "-c", command)
     }
     if workDir != "" {
         cmd.Dir = workDir                                       // 设置工作目录

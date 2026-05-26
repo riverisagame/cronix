@@ -317,8 +317,10 @@ const cronHint = computed(() => {
 
   // 时分
   if (min === '*' && hour === '*') segs.push('每分钟')
-  else if (hour === '*' && min !== '*') segs.push(`每小时第${min}分`)
-  else if (min === '0' && hour !== '*') segs.push(`${hour}:00`)
+  else if (min.startsWith('*/') && hour === '*') { segs.push(`每${min.slice(2)}分钟`); return segs.join(' ') }
+	  else if (hour === '*' && min !== '*') segs.push(`每小时第${describeField(min, '分')}`)
+  else if (hour.startsWith('*/') && min === '0') segs.push(`每${hour.slice(2)}小时`)
+	  else if (min === '0' && hour !== '*') segs.push(`${hour}:00`)
   else segs.push(`${hour.padStart(2, '0')}:${min.padStart(2, '0')}`)
 
   // 日期 vs 星期
@@ -341,19 +343,32 @@ const cronValid = computed(() => {
 
 // --- cron 快捷宏 ---
 const CRON_MACROS: Record<string,string> = {
-  '@yearly':  '0 0 0 1 1 *', '@annually': '0 0 0 1 1 *',
-  '@monthly': '0 0 0 1 * *', '@weekly': '0 0 0 * * 0',
-  '@daily':   '0 0 0 * * *', '@midnight': '0 0 0 * * *',
-  '@hourly':  '0 0 * * * *',
+  '@yearly':   '0 0 0 1 1 *',
+  '@annually': '0 0 0 1 1 *',
+  '@monthly':  '0 0 0 1 * *',
+  '@weekly':   '0 0 0 * * 0',
+  '@daily':    '0 0 0 * * *',
+  '@midnight': '0 0 0 * * *',
+  '@hourly':   '0 0 * * * *',
 }
 const cronMacros = [
+  { label:'@every 1s',  value:'*/1 * * * * *' },
+  { label:'@every 5s',  value:'*/5 * * * * *' },
   { label:'@every 10s', value:'*/10 * * * * *' },
   { label:'@every 30s', value:'*/30 * * * * *' },
-  { label:'@hourly', value:'0 0 * * * *' }, { label:'@daily', value:'0 0 0 * * *' },
-  { label:'@weekly', value:'0 0 0 * * 0' }, { label:'@monthly', value:'0 0 0 1 * *' },
-  { label:'@every 5m', value:'0 */5 * * * *' },
-  { label:'@every 30m', value:'0 */30 * * * *' },
+  { label:'@every 1m',  value:'* * * * *' },
+  { label:'@every 5m',  value:'0 */5 * * * *' },
+  { label:'@every 10m', value:'0 */10 * * * *' },
   { label:'@every 15m', value:'0 */15 * * * *' },
+  { label:'@every 30m', value:'0 */30 * * * *' },
+  { label:'@hourly',    value:'0 0 * * * *' },
+  { label:'@every 2h',  value:'0 0 */2 * * *' },
+  { label:'@every 6h',  value:'0 0 */6 * * *' },
+  { label:'@every 12h', value:'0 0 */12 * * *' },
+  { label:'@daily',     value:'0 0 0 * * *' },
+  { label:'@weekly',    value:'0 0 0 * * 0' },
+  { label:'@monthly',   value:'0 0 0 1 * *' },
+  { label:'@yearly',    value:'0 0 0 1 1 *' },
 ]
 function applyMacro(val: string) { form.value.cron_expr = val }
 function onCronInput() { /* reactive update handles everything */ }
@@ -413,7 +428,7 @@ function cronNext(expr: string, count: number = 5): string[] {
   if (subMinute) {
     start.setSeconds(start.getSeconds() + 1, 0) // next full second
   } else {
-    start.setSeconds(start.getSeconds() + 60, start.getSeconds()) // next full minute
+    start.setSeconds(0, 0); start.setMinutes(start.getMinutes() + 1) // next full minute
   }
   start.setMilliseconds(0)
   const stepMs = subMinute ? 1000 : 60000
