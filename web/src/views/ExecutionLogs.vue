@@ -44,11 +44,11 @@
       <el-table-v2
         :columns="columns"
         :data="logs"
-        :width="1200"
+        :width="1300"
         :height="600"
         :row-height="40"
+        :row-event-handlers="rowEventHandlers"
         fixed
-        @row-click="showDetail"
         style="cursor:pointer"
       />
 
@@ -91,7 +91,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
-import { ElTableV2 } from 'element-plus'
+import { ElTableV2, ElTag } from 'element-plus'
 import type { Column } from 'element-plus'
 import { logAPI } from '../api/index'
 import { Search, Refresh } from '@element-plus/icons-vue'
@@ -119,29 +119,54 @@ const outputDisplay = computed(() => {
   return detail.value.output.split('\n').slice(0, 200).join('\n') + '\n... (truncated)'
 })
 
+function formatTime(iso: string): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 const columns: Column<any>[] = [
   { key: 'id', title: 'ID', width: 60, dataKey: 'id' },
-  { key: 'task_name', title: 'Task', width: 150, dataKey: 'task_name' },
-  { key: 'group_name', title: 'Group', width: 120, dataKey: 'group_name' },
+  { key: 'task_name', title: 'Task', width: 140, dataKey: 'task_name' },
+  { key: 'group_name', title: 'Group', width: 110, dataKey: 'group_name' },
   {
     key: 'status', title: 'Status', width: 100, dataKey: 'status',
     cellRenderer: ({ cellData }: any) => {
-      const type = cellData === 'success' ? 'success' : cellData === 'failed' ? 'danger' : 'warning'
-      return h('el-tag', { type, size: 'small' }, () => (cellData || '').toUpperCase())
+      const val = cellData ?? ''
+      const type = val === 'success' ? 'success' : val === 'failed' ? 'danger' : val === 'timeout' ? 'warning' : 'info'
+      return h(ElTag, { type, size: 'small' }, () => val.toUpperCase())
     }
   },
   { key: 'trigger_type', title: 'Trigger', width: 80, dataKey: 'trigger_type' },
-  { key: 'start_time', title: 'Time', width: 170, dataKey: 'start_time' },
+  {
+    key: 'start_time', title: 'Time', width: 160, dataKey: 'start_time',
+    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-size:12px' }, formatTime(cellData))
+  },
   { key: 'exit_code', title: 'Exit', width: 60, dataKey: 'exit_code' },
   {
-    key: 'error_msg', title: 'Preview', width: 200, dataKey: 'error_msg',
-    cellRenderer: ({ cellData }: any) => {
-      if (!cellData) return h('span', { style: 'color:#c0c4cc' }, '-')
-      const text = cellData.length > 80 ? cellData.substring(0, 80) + '...' : cellData
-      return h('code', { style: 'font-size:12px;color:#606266' }, text)
+    key: 'error_msg', title: 'Preview', width: 220, dataKey: 'error_msg',
+    cellRenderer: ({ cellData, rowData }: any) => {
+      const output = rowData?.output || ''
+      const errMsg = cellData || ''
+      if (output) {
+        const text = output.length > 80 ? output.substring(0, 80) + '...' : output
+        return h('code', { style: 'font-size:12px;color:#303133' }, text)
+      }
+      if (errMsg) {
+        const text = errMsg.length > 80 ? errMsg.substring(0, 80) + '...' : errMsg
+        return h('code', { style: 'font-size:12px;color:#F56C6C' }, text)
+      }
+      return h('span', { style: 'color:#c0c4cc' }, '-')
     }
   },
 ]
+
+const rowEventHandlers = {
+  onClick({ rowData }: any) {
+    showDetail(rowData)
+  }
+}
 
 function duration(start:string, end:string) {
   const diff = new Date(end).getTime() - new Date(start).getTime()
@@ -177,7 +202,7 @@ async function clearAllLogs() {
   } finally { clearing.value = false }
 }
 
-async function showDetail({ rowData }: any) {
+async function showDetail(rowData: any) {
   drawerVisible.value = true
   detail.value = null
   detailLoading.value = true

@@ -158,6 +158,11 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
         return
     }
+    // 清除只读/计算字段，防止前端传入这些值被写入数据库
+    delete(updates, "id")
+    delete(updates, "group_name")
+    delete(updates, "created_at")
+    delete(updates, "updated_at")
     // 输入校验：验证每个可能更新的字段
     if name, ok := updates["name"].(string); ok {
         name = strings.TrimSpace(name)

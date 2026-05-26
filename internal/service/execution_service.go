@@ -28,6 +28,45 @@ func NewExecutionService(db *gorm.DB) *ExecutionService {
     return &ExecutionService{DB: db, cache: &statsCache{}}
 }
 
+// enrichGroupNames fills in GroupName for a slice of logs via task->group lookup.
+func (s *ExecutionService) enrichGroupNames(logs []model.ExecutionLog) {
+    taskIDs := make([]uint, 0, len(logs))
+    for _, l := range logs {
+        if l.TaskID != nil {
+            taskIDs = append(taskIDs, *l.TaskID)
+        }
+    }
+    if len(taskIDs) == 0 {
+        return
+    }
+    var tasks []model.Task
+    s.DB.Where("id IN ? AND group_id IS NOT NULL", taskIDs).Find(&tasks)
+    if len(tasks) == 0 {
+        return
+    }
+    groupIDs := make([]uint, 0, len(tasks))
+    taskGroup := make(map[uint]uint, len(tasks))
+    for _, t := range tasks {
+        if t.GroupID != nil {
+            taskGroup[t.ID] = *t.GroupID
+            groupIDs = append(groupIDs, *t.GroupID)
+        }
+    }
+    var groups []model.TaskGroup
+    s.DB.Where("id IN ?", groupIDs).Find(&groups)
+    groupNames := make(map[uint]string, len(groups))
+    for _, g := range groups {
+        groupNames[g.ID] = g.Name
+    }
+    for i := range logs {
+        if logs[i].TaskID != nil {
+            if gid, ok := taskGroup[*logs[i].TaskID]; ok {
+                logs[i].GroupName = groupNames[gid]
+            }
+        }
+    }
+}
+
 // GetTaskLogs 获取某个任务的执行日志（分页、支持按状态筛选）
 // 参数 taskID：任务ID
 // 参数 page：页码
@@ -37,7 +76,7 @@ func NewExecutionService(db *gorm.DB) *ExecutionService {
 func (s *ExecutionService) GetTaskLogs(taskID uint, page, pageSize int, status string) ([]model.ExecutionLog, int64, error) {
     var logs []model.ExecutionLog
     var total int64
-    query := s.DB.Model(&model.ExecutionLog{}).Omit("output").Where("task_id = ?", taskID) // 筛选指定任务的日志
+    query := s.DB.Model(&model.ExecutionLog{}).Where("task_id = ?", taskID) // 筛选指定任务的日志
     if status != "" {                                              // 如果指定了状态筛选
         query = query.Where("status = ?", status)                  // 添加状态筛选条件
     }
@@ -47,6 +86,7 @@ func (s *ExecutionService) GetTaskLogs(taskID uint, page, pageSize int, status s
     if err := query.Order("start_time DESC").Offset(offset).Limit(pageSize).Find(&logs).Error; err != nil {
         return nil, 0, err
     }
+    s.enrichGroupNames(logs)
     return logs, total, nil
 }
 
@@ -59,7 +99,7 @@ func (s *ExecutionService) GetTaskLogs(taskID uint, page, pageSize int, status s
 func (s *ExecutionService) GetAllLogs(page, pageSize int, taskName, status, since string) ([]model.ExecutionLog, int64, error) {
     var logs []model.ExecutionLog
     var total int64
-    query := s.DB.Model(&model.ExecutionLog{}).Omit("output")                     // 不限定任务，查所有日志
+    query := s.DB.Model(&model.ExecutionLog{})                     // 不限定任务，查所有日志
 
     // 添加各种筛选条件
     if taskName != "" {                                            // 按任务名模糊搜索
@@ -81,41 +121,7 @@ func (s *ExecutionService) GetAllLogs(page, pageSize int, taskName, status, sinc
         return nil, 0, err
     }
 
-    // Enrich with group names via task->group lookup
-    taskIDs := make([]uint, 0, len(logs))
-    for _, l := range logs {
-        if l.TaskID != nil {
-            taskIDs = append(taskIDs, *l.TaskID)
-        }
-    }
-    if len(taskIDs) > 0 {
-        var tasks []model.Task
-        s.DB.Where("id IN ? AND group_id IS NOT NULL", taskIDs).Find(&tasks)
-        if len(tasks) > 0 {
-            groupIDs := make([]uint, 0, len(tasks))
-            taskGroup := make(map[uint]uint, len(tasks))
-            for _, t := range tasks {
-                if t.GroupID != nil {
-                    taskGroup[t.ID] = *t.GroupID
-                    groupIDs = append(groupIDs, *t.GroupID)
-                }
-            }
-            var groups []model.TaskGroup
-            s.DB.Where("id IN ?", groupIDs).Find(&groups)
-            groupNames := make(map[uint]string, len(groups))
-            for _, g := range groups {
-                groupNames[g.ID] = g.Name
-            }
-            for i := range logs {
-                if logs[i].TaskID != nil {
-                    if gid, ok := taskGroup[*logs[i].TaskID]; ok {
-                        logs[i].GroupName = groupNames[gid]
-                    }
-                }
-            }
-        }
-    }
-
+    s.enrichGroupNames(logs)
     return logs, total, nil
 }
 
@@ -173,6 +179,41 @@ func (s *ExecutionService) GetDashboardStats() (map[string]interface{}, error) {
     return stats, nil
 }
 
+// buildTaskGroupNameMap returns a map from task ID to group name for all tasks in groups.
+func (s *ExecutionService) buildTaskGroupNameMap() map[uint]string {
+    taskGroupName := make(map[uint]string)
+    var allTaskIDs []uint
+    s.DB.Model(&model.ExecutionLog{}).Select("DISTINCT task_id").Where("task_id IS NOT NULL").Pluck("task_id", &allTaskIDs)
+    if len(allTaskIDs) == 0 {
+        return taskGroupName
+    }
+    var tasks []model.Task
+    s.DB.Where("id IN ? AND group_id IS NOT NULL", allTaskIDs).Find(&tasks)
+    if len(tasks) == 0 {
+        return taskGroupName
+    }
+    groupIDs := make([]uint, 0, len(tasks))
+    taskGroup := make(map[uint]uint, len(tasks))
+    for _, t := range tasks {
+        if t.GroupID != nil {
+            taskGroup[t.ID] = *t.GroupID
+            groupIDs = append(groupIDs, *t.GroupID)
+        }
+    }
+    var groups []model.TaskGroup
+    s.DB.Where("id IN ?", groupIDs).Find(&groups)
+    groupNames := make(map[uint]string, len(groups))
+    for _, g := range groups {
+        groupNames[g.ID] = g.Name
+    }
+    for tid, gid := range taskGroup {
+        if name, ok := groupNames[gid]; ok {
+            taskGroupName[tid] = name
+        }
+    }
+    return taskGroupName
+}
+
 // ExportLogsStream iterates matching execution logs, calling fn for each row.
 // Rows are streamed from the DB cursor — the full result set is never loaded into memory.
 func (s *ExecutionService) ExportLogsStream(taskName, status, since string, maxRows int, fn func(model.ExecutionLog) error) error {
@@ -190,6 +231,8 @@ func (s *ExecutionService) ExportLogsStream(taskName, status, since string, maxR
         }
     }
 
+    taskGroupName := s.buildTaskGroupNameMap()
+
     rows, err := query.Order("start_time DESC").Limit(maxRows).Rows()
     if err != nil {
         return err
@@ -200,6 +243,9 @@ func (s *ExecutionService) ExportLogsStream(taskName, status, since string, maxR
         var log model.ExecutionLog
         if err := s.DB.ScanRows(rows, &log); err != nil {
             return err
+        }
+        if log.TaskID != nil {
+            log.GroupName = taskGroupName[*log.TaskID]
         }
         if err := fn(log); err != nil {
             return err
@@ -241,6 +287,15 @@ func (s *ExecutionService) GetLog(id uint) (*model.ExecutionLog, error) {
     var log model.ExecutionLog
     if err := s.DB.First(&log, id).Error; err != nil {
         return nil, err
+    }
+    if log.TaskID != nil {
+        var task model.Task
+        if err := s.DB.First(&task, *log.TaskID).Error; err == nil && task.GroupID != nil {
+            var group model.TaskGroup
+            if err := s.DB.First(&group, *task.GroupID).Error; err == nil {
+                log.GroupName = group.Name
+            }
+        }
     }
     return &log, nil
 }

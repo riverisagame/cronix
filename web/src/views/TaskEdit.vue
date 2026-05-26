@@ -484,7 +484,7 @@ async function save() {
   // 开始保存，按钮转圈
   saving.value = true
   try {
-    const { dep_ids, ...taskData } = form.value
+    const { dep_ids, id, group_name, created_at, updated_at, sort_order, ...taskData } = form.value
     if (isNew.value) {
       // 新建模式：调用创建 API
       const r = await taskAPI.create(taskData)
