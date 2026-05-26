@@ -99,20 +99,50 @@ func (e *Executor) cleanupOldLogs() {
 
     // 策略二：按条数清理——如果日志总数超过maxRecords，删除最旧的那些
     if maxRecords > 0 {
-        var count int64
-        e.db.Model(&model.ExecutionLog{}).Count(&count)         // 统计当前日志总条数
-        if count > int64(maxRecords) {                          // 如果超过了最大限制
-            excess := count - int64(maxRecords)                 // 计算超出多少条
-            // 删除ID最小的那部分（也就是最旧的记录）
-            result := e.db.Where("id IN (?)",
-                e.db.Model(&model.ExecutionLog{}).Select("id").Order("id ASC").Limit(int(excess)), // 子查询：找出最旧的excess条记录的ID
-            ).Delete(&model.ExecutionLog{})
-            if result.Error != nil {
-                log.Warn().Err(result.Error).Msg("log cleanup (max_records) failed")
-            } else if result.RowsAffected > 0 {
-                log.Info().Int64("deleted", result.RowsAffected).Int("max_records", maxRecords).Int64("was", count).Msg("log cleanup (max_records)")
-            }
+        e.deleteOldestBatch(&model.ExecutionLog{}, "execution_logs", maxRecords)
+    }
+
+    // Group execution log cleanup
+    if retentionDays > 0 {
+        cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+        result := e.db.Where("created_at < ?", cutoff).Delete(&model.GroupExecutionLog{})
+        if result.Error != nil {
+            log.Warn().Err(result.Error).Msg("group log cleanup (retention) failed")
+        } else if result.RowsAffected > 0 {
+            log.Info().Int64("deleted", result.RowsAffected).Int("retention_days", retentionDays).Msg("group log cleanup (retention)")
         }
+    }
+    if maxRecords > 0 {
+        e.deleteOldestBatch(&model.GroupExecutionLog{}, "group_execution_logs", maxRecords)
+    }
+}
+
+// deleteOldestBatch deletes excess records in batches of 1000 to avoid
+// long transactions and large subquery expansion on big tables.
+func (e *Executor) deleteOldestBatch(model interface{}, tableName string, maxRecords int) {
+    var count int64
+    e.db.Model(model).Count(&count)
+    if count <= int64(maxRecords) {
+        return
+    }
+    excess := count - int64(maxRecords)
+    batchSize := int64(1000)
+    for excess > 0 {
+        n := batchSize
+        if excess < n {
+            n = excess
+        }
+        result := e.db.Where("id IN (?)",
+            e.db.Model(model).Select("id").Order("id ASC").Limit(int(n)),
+        ).Delete(model)
+        if result.Error != nil {
+            log.Warn().Err(result.Error).Str("table", tableName).Msg("batch cleanup failed")
+            break
+        }
+        if result.RowsAffected == 0 {
+            break
+        }
+        excess -= result.RowsAffected
     }
 }
 
