@@ -141,6 +141,17 @@ func (h *LogHandler) DeleteLog(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
 }
 
+// GetLog returns a single execution log with full output.
+func (h *LogHandler) GetLog(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    log, err := h.ExecSvc.GetLog(uint(id))
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "log not found"})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": log})
+}
+
 // ClearGroupLogs deletes all execution logs for a group.
 func (h *LogHandler) ClearGroupLogs(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)

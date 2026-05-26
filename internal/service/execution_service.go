@@ -24,7 +24,7 @@ type ExecutionService struct {
 func (s *ExecutionService) GetTaskLogs(taskID uint, page, pageSize int, status string) ([]model.ExecutionLog, int64, error) {
     var logs []model.ExecutionLog
     var total int64
-    query := s.DB.Model(&model.ExecutionLog{}).Where("task_id = ?", taskID) // 筛选指定任务的日志
+    query := s.DB.Model(&model.ExecutionLog{}).Omit("output").Where("task_id = ?", taskID) // 筛选指定任务的日志
     if status != "" {                                              // 如果指定了状态筛选
         query = query.Where("status = ?", status)                  // 添加状态筛选条件
     }
@@ -46,7 +46,7 @@ func (s *ExecutionService) GetTaskLogs(taskID uint, page, pageSize int, status s
 func (s *ExecutionService) GetAllLogs(page, pageSize int, taskName, status, since string) ([]model.ExecutionLog, int64, error) {
     var logs []model.ExecutionLog
     var total int64
-    query := s.DB.Model(&model.ExecutionLog{})                     // 不限定任务，查所有日志
+    query := s.DB.Model(&model.ExecutionLog{}).Omit("output")                     // 不限定任务，查所有日志
 
     // 添加各种筛选条件
     if taskName != "" {                                            // 按任务名模糊搜索
@@ -133,6 +133,15 @@ func (s *ExecutionService) ClearTaskLogs(taskID uint) (int64, error) {
 // DeleteLog 删除单条执行日志
 func (s *ExecutionService) DeleteLog(id uint) error {
     return s.DB.Delete(&model.ExecutionLog{}, id).Error
+}
+
+// GetLog returns a single execution log with full output.
+func (s *ExecutionService) GetLog(id uint) (*model.ExecutionLog, error) {
+    var log model.ExecutionLog
+    if err := s.DB.First(&log, id).Error; err != nil {
+        return nil, err
+    }
+    return &log, nil
 }
 
 // ClearGroupLogs 清空指定组的执行日志
