@@ -151,7 +151,7 @@ const columns: Column<any>[] = [
       const errMsg = cellData || ''
       if (output) {
         const text = output.length > 80 ? output.substring(0, 80) + '...' : output
-        return h('code', { style: 'font-size:12px;color:#303133' }, text)
+        return h('code', { style: 'font-size:12px;color:var(--el-text-color-regular)' }, text)
       }
       if (errMsg) {
         const text = errMsg.length > 80 ? errMsg.substring(0, 80) + '...' : errMsg
