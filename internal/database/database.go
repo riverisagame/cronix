@@ -133,6 +133,11 @@ func Init(dbPath string) error {
     // 虽然只有一个连接，但对 Cronix 这种场景（任务调度）来说性能足够了
     sqlDB.SetMaxOpenConns(1)
 
+    // WAL mode: better concurrent read/write performance
+    db.Exec("PRAGMA journal_mode=WAL")
+    // NORMAL sync is safe in WAL mode, much faster than FULL
+    db.Exec("PRAGMA synchronous=NORMAL")
+
     // --- 第4步：自动建表/更新表结构（AutoMigrate）---
 
     // AutoMigrate 是 GORM 提供的一个非常方便的功能
@@ -156,6 +161,13 @@ func Init(dbPath string) error {
     ); err != nil {
         return fmt.Errorf("自动建表失败: %w", err)
     }
+
+    // Indexes for log cleanup and query performance
+    db.Exec("CREATE INDEX IF NOT EXISTS idx_el_created_at ON execution_logs(created_at)")
+    db.Exec("CREATE INDEX IF NOT EXISTS idx_el_task_start ON execution_logs(task_id, start_time)")
+    db.Exec("CREATE INDEX IF NOT EXISTS idx_el_status_start ON execution_logs(status, start_time)")
+    db.Exec("CREATE INDEX IF NOT EXISTS idx_gel_created_at ON group_execution_logs(created_at)")
+    db.Exec("CREATE INDEX IF NOT EXISTS idx_gel_group_start ON group_execution_logs(group_id, start_time)")
 
     // --- 第5步：把连接对象保存到全局变量 ---
 
