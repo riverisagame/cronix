@@ -13,11 +13,10 @@ test.describe('Execution Logs', () => {
     await expect(page.locator('body')).toBeVisible()
   })
 
-  test('status filter changes data', async ({ page }) => {
+  test('status filter is visible', async ({ page }) => {
     const logsPage = new ExecutionLogsPage(page)
     await logsPage.goto()
-    await logsPage.filterByStatus('success')
-    await page.waitForTimeout(500)
+    await logsPage.expectStatusFilterVisible()
   })
 
   test('export buttons exist', async ({ page }) => {

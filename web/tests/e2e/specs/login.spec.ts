@@ -5,7 +5,8 @@ test.describe('Login', () => {
   let loginPage: LoginPage
 
   test.beforeEach(async ({ page }) => {
-    // Clear storage state to start unauthenticated
+    // Navigate first to get a document origin, then clear the stored token
+    await page.goto('/login', { waitUntil: 'commit' })
     await page.evaluate(() => localStorage.clear())
     loginPage = new LoginPage(page)
   })

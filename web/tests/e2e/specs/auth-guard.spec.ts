@@ -2,7 +2,9 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Auth Guard', () => {
   test.beforeEach(async ({ page }) => {
-    // Clear storage state to start unauthenticated
+    // Navigate to a page on the origin first (storageState leaves us on about:blank)
+    // then clear localStorage to test unauthenticated behavior
+    await page.goto('/login', { waitUntil: 'commit' })
     await page.evaluate(() => localStorage.clear())
   })
 

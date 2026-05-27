@@ -276,6 +276,17 @@ jobs:
             fi
           done
 
+      - name: "Seed test data via API"
+        run: |
+          TOKEN=$(curl -sf http://localhost:8080/api/login -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"admin"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['token'])")
+          curl -sf http://localhost:8080/api/tasks -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"name":"e2e-test-task","cron_expr":"0 0 1 * * *","task_type":"shell","command":"echo e2e","enabled":true}'
+          echo "Seed data inserted"
+
       - name: "Run Playwright tests"
         working-directory: web
         run: npx playwright test
