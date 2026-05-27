@@ -12,7 +12,7 @@ export const sampleTask = {
   enabled: true,
   description: 'Daily database backup',
   group_name: 'maintenance',
-  group_id: null,
+  group_id: 1,
   depends_on_ids: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -98,15 +98,15 @@ export const handlers = [
   http.get(`${BASE}/groups/:id/logs`, () => paginated([sampleLog])),
 
   // ---- Logs ----
+  http.get(`${BASE}/logs/export`, () => new HttpResponse('id,name,status\n1,backup-db,success', {
+    headers: { 'Content-Type': 'text/csv' },
+  })),
   http.get(`${BASE}/logs`, () => paginated([sampleLog])),
   http.delete(`${BASE}/logs`, () => ok(null)),
   http.delete(`${BASE}/logs/:id`, () => ok(null)),
   http.get(`${BASE}/logs/:id`, () => ok(sampleLog)),
   http.delete(`${BASE}/tasks/:id/logs`, () => ok(null)),
   http.delete(`${BASE}/groups/:id/logs`, () => ok(null)),
-  http.get(`${BASE}/logs/export`, () => new HttpResponse('id,name,status\n1,backup-db,success', {
-    headers: { 'Content-Type': 'text/csv' },
-  })),
 
   // ---- Dashboard ----
   http.get(`${BASE}/dashboard/stats`, () => ok(sampleDashboardStats)),
@@ -116,5 +116,5 @@ export const handlers = [
   http.put(`${BASE}/settings`, () => ok(sampleSettings)),
 
   // ---- Health ----
-  http.get(`${BASE}/health`, () => HttpResponse.json({ status: 'healthy' })),
+  http.get(`${BASE}/health`, () => HttpResponse.json({ status: 'healthy', version: '1.7.0' })),
 ]
