@@ -263,7 +263,7 @@ jobs:
               yaml.dump(cfg, f)
           "
           sed -i 's|path: ./data/cronix.db|path: /tmp/e2e-test.db|' /tmp/e2e-config.yaml
-          ./cronix-linux-amd64 serve -c /tmp/e2e-config.yaml &
+          sudo ./cronix-linux-amd64 serve -c /tmp/e2e-config.yaml &
           for i in $(seq 1 15); do
             sleep 1
             if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
