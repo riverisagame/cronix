@@ -1,3 +1,5 @@
+/// <reference types="vitest/globals" />
+
 // Mock browser APIs not available in happy-dom
 global.ResizeObserver = class ResizeObserver {
   observe() {}
