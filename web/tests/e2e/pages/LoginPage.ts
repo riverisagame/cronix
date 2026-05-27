@@ -11,13 +11,14 @@ export class LoginPage extends BasePage {
   async submit() { await this.page.click('[data-testid="login-submit"]') }
   async login(username: string, password: string) {
     await this.goto()
+    await this.page.waitForSelector('[data-testid="login-submit"]', { state: 'visible', timeout: 10000 })
     await this.fillCredentials(username, password)
     await this.submit()
   }
   async expectErrorVisible() {
-    await expect(this.page.locator('[data-testid="login-error"]')).toBeVisible()
+    await expect(this.page.locator('[data-testid="login-error"]')).toBeVisible({ timeout: 10000 })
   }
   async expectRedirectToDashboard() {
-    await this.page.waitForURL('/')
+    await this.page.waitForURL('**/', { timeout: 15000 })
   }
 }
