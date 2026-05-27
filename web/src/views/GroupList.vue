@@ -2,7 +2,7 @@
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2 style="margin:0">Task Groups</h2>
-      <el-button type="primary" @click="router.push('/groups/new')">
+      <el-button type="primary" @click="router.push('/groups/new')" data-testid="btn-new-group">
         <el-icon><Plus /></el-icon> New Group
       </el-button>
     </div>

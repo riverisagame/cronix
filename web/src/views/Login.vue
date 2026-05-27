@@ -41,7 +41,7 @@
               username 变量的值变化时，输入框里的内容也跟着变。
             placeholder="admin" 在输入框为空时显示提示文字 "admin"
           -->
-          <el-input v-model="username" placeholder="admin" />
+          <el-input v-model="username" placeholder="admin" data-testid="login-username" />
         </el-form-item>
 
         <!-- 密码输入框表单项 -->
@@ -52,7 +52,7 @@
             @keyup.enter="handleLogin" 监听键盘事件：
               当用户在密码框里按下 Enter 键时，自动触发登录
           -->
-          <el-input v-model="password" type="password" show-password @keyup.enter="handleLogin" />
+          <el-input v-model="password" type="password" show-password @keyup.enter="handleLogin" data-testid="login-password" />
         </el-form-item>
 
         <!-- 登录按钮表单项 -->
@@ -65,7 +65,7 @@
               当 loading 为 true 时，按钮显示加载动画并禁止点击（防止重复提交）
             style="width:100%" 按钮宽度撑满整行
           -->
-          <el-button type="primary" @click="handleLogin" :loading="loading" style="width:100%">
+          <el-button type="primary" @click="handleLogin" :loading="loading" style="width:100%" data-testid="login-submit">
             Sign In
           </el-button>
         </el-form-item>
@@ -79,7 +79,7 @@
         show-icon 显示一个图标
         :closable="false" 禁止用户手动关闭这个提示（只能等下次登录时自动清除）
       -->
-      <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
+      <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" data-testid="login-error" />
     </el-card>
   </div>
 </template>

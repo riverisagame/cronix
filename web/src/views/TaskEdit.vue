@@ -45,7 +45,7 @@
         <!-- 任务名称（必填项，用 required 属性在标签前显示红色星号） -->
         <el-form-item label="Task Name" required>
           <!-- v-model="form.name" 双向绑定到 form 对象的 name 属性 -->
-          <el-input v-model="form.name" placeholder="e.g. backup-database" />
+          <el-input v-model="form.name" placeholder="e.g. backup-database" data-testid="task-form-name" />
         </el-form-item>
 
         <!--
@@ -55,7 +55,7 @@
           星号 * 表示"每一个"（每天、每月等）
         -->
         <el-form-item label="Cron Expression">
-          <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）"
+          <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）" data-testid="task-form-cron"
             @input="onCronInput" />
           <!-- 快捷宏 -->
           <div style="margin-top:10px;display:flex;gap:4px;flex-wrap:wrap">
@@ -92,7 +92,7 @@
           v-model="form.task_type" 绑定的值变化时，选中按钮自动更新
         -->
         <el-form-item label="Task Type">
-          <el-radio-group v-model="form.task_type">
+          <el-radio-group v-model="form.task_type" data-testid="task-form-type">
             <el-radio-button value="shell">Shell</el-radio-button>
             <el-radio-button value="http">HTTP</el-radio-button>
             <el-radio-button value="cleanup">Cleanup</el-radio-button>
@@ -122,7 +122,7 @@
 
           <!-- 要执行的 Shell 命令（必填），多行文本框 -->
           <el-form-item label="Command" required>
-            <el-input v-model="form.command" type="textarea" rows="3" placeholder="echo hello" />
+            <el-input v-model="form.command" type="textarea" rows="3" placeholder="echo hello" data-testid="task-form-command" />
           </el-form-item>
 
           <!-- 工作目录（命令在哪个文件夹下执行），非必填 -->
@@ -221,7 +221,7 @@
             :loading="saving" 保存时按钮转圈
             @click="save" 点击触发保存逻辑
           -->
-          <el-button type="primary" @click="save" :loading="saving">{{ isNew?'Create Task':'Save Changes' }}</el-button>
+          <el-button type="primary" @click="save" :loading="saving" data-testid="btn-save-task">{{ isNew?'Create Task':'Save Changes' }}</el-button>
           <!-- 取消按钮：直接返回任务列表 -->
           <el-button @click="router.push('/tasks')">Cancel</el-button>
         </el-form-item>

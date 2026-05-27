@@ -8,8 +8,8 @@
       <el-popconfirm title="Delete ALL execution logs?" @confirm="clearAllLogs">
         <template #reference><el-button size="small" type="danger" :loading="clearing">Clear All</el-button></template>
       </el-popconfirm>
-      <el-button size="small" @click="exportLogs('csv')" :loading="exporting" :disabled="exporting">Export CSV</el-button>
-      <el-button size="small" @click="exportLogs('json')" :loading="exporting" :disabled="exporting">Export JSON</el-button>
+      <el-button size="small" @click="exportLogs('csv')" :loading="exporting" :disabled="exporting" data-testid="btn-export-csv">Export CSV</el-button>
+      <el-button size="small" @click="exportLogs('json')" :loading="exporting" :disabled="exporting" data-testid="btn-export-json">Export JSON</el-button>
     </h2>
 
     <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
@@ -21,7 +21,7 @@
           </el-input>
         </el-col>
         <el-col :span="4">
-          <el-select v-model="filters.status" placeholder="Status" clearable @change="load" style="width:100%">
+          <el-select v-model="filters.status" placeholder="Status" clearable @change="load" style="width:100%" data-testid="log-status-filter">
             <el-option label="Success" value="success" />
             <el-option label="Failed" value="failed" />
             <el-option label="Timeout" value="timeout" />
@@ -29,7 +29,7 @@
           </el-select>
         </el-col>
         <el-col :span="6">
-          <el-select v-model="filters.since" placeholder="Time range" clearable @change="load" style="width:100%">
+          <el-select v-model="filters.since" placeholder="Time range" clearable @change="load" style="width:100%" data-testid="log-time-filter">
             <el-option label="Last 1 hour" value="1h" />
             <el-option label="Last 6 hours" value="6h" />
             <el-option label="Last 24 hours" value="24h" />

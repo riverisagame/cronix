@@ -138,7 +138,7 @@
     </el-card>
 
     <!-- 保存按钮 -->
-    <el-button type="primary" @click="save" :loading="saving" style="margin-top:20px">Save Settings</el-button>
+    <el-button type="primary" @click="save" :loading="saving" style="margin-top:20px" data-testid="btn-save-settings">Save Settings</el-button>
 
     <!--
       提示信息：告知用户设置保存在 config.yaml 文件中，大部分修改无需重启即可生效

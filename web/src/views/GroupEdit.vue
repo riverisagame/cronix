@@ -8,13 +8,13 @@
     <el-card shadow="hover" style="margin-bottom:20px">
       <el-form :model="form" label-width="120px" style="max-width:1100px">
         <el-form-item label="Name" required>
-          <el-input v-model="form.name" placeholder="e.g. daily-backup-pipeline" />
+          <el-input v-model="form.name" placeholder="e.g. daily-backup-pipeline" data-testid="group-form-name" />
         </el-form-item>
         <el-form-item label="Description">
           <el-input v-model="form.description" type="textarea" rows="2" placeholder="Optional description" />
         </el-form-item>
         <el-form-item label="Mode" required>
-          <el-radio-group v-model="form.mode">
+          <el-radio-group v-model="form.mode" data-testid="group-form-mode">
             <el-radio value="parallel">Parallel — all tasks run at once</el-radio>
             <el-radio value="sequential">Sequential — run one by one in order</el-radio>
           </el-radio-group>
@@ -47,7 +47,7 @@
         
           </div></el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="saving" @click="save">{{ isNew ? 'Create' : 'Save' }}</el-button>
+          <el-button type="primary" :loading="saving" @click="save" data-testid="btn-save-group">{{ isNew ? 'Create' : 'Save' }}</el-button>
         </el-form-item>
       </el-form>
     </el-card>

@@ -22,7 +22,7 @@
       -->
       <el-col :span="6">
         <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-        <el-card shadow="hover" class="glass-card">
+        <el-card shadow="hover" class="glass-card" data-testid="stat-total-tasks">
           <!-- 卡片内部用 flex 布局：图标在左，文字在右，中间有 16px 间距 -->
           <div style="display:flex;align-items:center;gap:16px">
             <!--
@@ -47,7 +47,7 @@
       <!-- 第二张卡片：Enabled（已启用的任务数），绿色图标 -->
       <el-col :span="6">
         <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-        <el-card shadow="hover" class="glass-card">
+        <el-card shadow="hover" class="glass-card" data-testid="stat-enabled">
           <div style="display:flex;align-items:center;gap:16px">
             <!-- CircleCheck 对勾图标，绿色 #10b981 -->
             <el-icon :size="28" color="var(--cyber-green)"><CircleCheck /></el-icon>
@@ -62,7 +62,7 @@
       <!-- 第三张卡片：Today Runs（今日运行次数），橙色图标 -->
       <el-col :span="6">
         <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-        <el-card shadow="hover" class="glass-card">
+        <el-card shadow="hover" class="glass-card" data-testid="stat-today-runs">
           <div style="display:flex;align-items:center;gap:16px">
             <!-- Timer 时钟图标，橙色 #f59e0b -->
             <el-icon :size="28" color="#f59e0b"><Timer /></el-icon>
@@ -80,7 +80,7 @@
       -->
       <el-col :span="6">
         <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-        <el-card shadow="hover" class="glass-card">
+        <el-card shadow="hover" class="glass-card" data-testid="stat-failures">
           <div style="display:flex;align-items:center;gap:16px">
             <!--
               WarningFilled 警告图标
@@ -104,7 +104,7 @@
       <!-- 左侧：成功率卡片，占 8/24（三分之一） -->
       <el-col :span="8">
         <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-        <el-card shadow="hover" class="glass-card">
+        <el-card shadow="hover" class="glass-card" data-testid="success-rate">
           <!--
             #header 是 el-card 的"插槽"（slot），用于自定义卡片的标题区域
             Vue 中的插槽（slot）可以理解为"预留的空位"，让使用者自定义某一块的内容
@@ -143,7 +143,7 @@
       <!-- 右侧：最近执行记录表格，占 16/24（三分之二） -->
       <el-col :span="16">
         <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-        <el-card shadow="hover" class="glass-card">
+        <el-card shadow="hover" class="glass-card" data-testid="recent-executions-table">
           <template #header>
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span style="font-weight:600">Recent Executions</span>

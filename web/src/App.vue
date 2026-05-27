@@ -56,31 +56,31 @@
           菜单项 index="/"：点击后跳转到网站根路径 /（即 Dashboard 仪表盘页）
           el-icon 包裹图标组件，Odometer 是一个仪表盘图标
         -->
-        <el-menu-item index="/">
+        <el-menu-item index="/" data-testid="nav-dashboard">
           <el-icon><Odometer /></el-icon>
           <span>Dashboard</span>
         </el-menu-item>
 
         <!-- 菜单项：跳转到 /tasks（任务管理页） -->
-        <el-menu-item index="/tasks">
+        <el-menu-item index="/tasks" data-testid="nav-tasks">
           <el-icon><List /></el-icon>
           <span>Tasks</span>
         </el-menu-item>
 
         <!-- 菜单项：跳转到 /groups（任务组管理页） -->
-        <el-menu-item index="/groups">
+        <el-menu-item index="/groups" data-testid="nav-groups">
           <el-icon><Grid /></el-icon>
           <span>Groups</span>
         </el-menu-item>
 
         <!-- 菜单项：跳转到 /logs（执行日志页） -->
-        <el-menu-item index="/logs">
+        <el-menu-item index="/logs" data-testid="nav-logs">
           <el-icon><Files /></el-icon>
           <span>Execution Logs</span>
         </el-menu-item>
 
         <!-- 菜单项：跳转到 /settings（设置页） -->
-        <el-menu-item index="/settings">
+        <el-menu-item index="/settings" data-testid="nav-settings">
           <el-icon><Setting /></el-icon>
           <span>Settings</span>
         </el-menu-item>
@@ -89,7 +89,7 @@
           退出登录菜单项：点击后不跳转路由，而是执行 doLogout 函数来清除登录状态
           @click="doLogout" 表示点击时触发 doLogout 方法
         -->
-        <el-menu-item index="/login" @click="doLogout">
+        <el-menu-item index="/login" @click="doLogout" data-testid="nav-logout">
           <el-icon><SwitchButton /></el-icon>
           <span>Logout</span>
         </el-menu-item>

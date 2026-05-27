@@ -19,7 +19,7 @@
         @click="router.push('/tasks/new')" 点击后跳转到新建任务页面
         /tasks/new 路由中，new 会被当作 :id 参数，TaskEdit.vue 根据 id==='new' 判断是新建模式
       -->
-      <el-button type="primary" @click="router.push('/tasks/new')">
+      <el-button type="primary" @click="router.push('/tasks/new')" data-testid="btn-new-task">
         <el-icon><Plus /></el-icon> New Task
       </el-button>
     </div>
@@ -39,7 +39,7 @@
             @clear="load" 清空时自动刷新列表
             @keyup.enter="load" 按回车键时自动搜索
           -->
-          <el-input v-model="search" placeholder="Search by name..." clearable @clear="load" @keyup.enter="load">
+          <el-input v-model="search" placeholder="Search by name..." clearable @clear="load" @keyup.enter="load" data-testid="task-search">
             <!-- #prefix 插槽：在输入框左侧放一个搜索图标 -->
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
@@ -55,7 +55,7 @@
             @change="load" 选择变化时自动刷新列表
             style="width:100%" 宽度撑满
           -->
-          <el-select v-model="filterType" placeholder="All Types" clearable @change="load" style="width:100%">
+          <el-select v-model="filterType" placeholder="All Types" clearable @change="load" style="width:100%" data-testid="task-type-filter">
             <!-- el-option：下拉选项，label 是显示文字，value 是实际值 -->
             <el-option label="Shell" value="shell" />
             <el-option label="HTTP" value="http" />
@@ -67,7 +67,7 @@
         <!-- 刷新按钮，占 4/24 宽度 -->
         <el-col :span="4">
           <!-- @click="load" 点击刷新按钮时重新从后端加载任务列表 -->
-          <el-button @click="load"><el-icon><Refresh /></el-icon> Refresh</el-button>
+          <el-button @click="load" data-testid="btn-refresh-tasks"><el-icon><Refresh /></el-icon> Refresh</el-button>
         </el-col>
       </el-row>
 
@@ -79,7 +79,7 @@
         :row-class-name="rowClass" 动态设置每一行的 CSS 类名：
           已禁用的任务行会加上 disabled-row 类（透明度降低，视觉上变灰）
       -->
-      <el-table v-if="viewMode === 'table'" :data="tasks" stripe v-loading="loading" :row-class-name="rowClass">
+      <el-table v-if="viewMode === 'table'" :data="tasks" stripe v-loading="loading" :row-class-name="rowClass" data-testid="task-table">
         <!-- ID 列，宽度 60px -->
         <el-table-column prop="id" label="ID" width="60" />
 
@@ -146,6 +146,7 @@
               @change="(val:boolean) => toggleTask(row, val)"
               active-text="ON" inactive-text="OFF"
               inline-prompt
+              data-testid="task-toggle"
             />
           </template>
         </el-table-column>
@@ -173,20 +174,20 @@
               :loading="runningId===row.id" 只有正在执行的那一行按钮显示加载动画
               @click="runTask(row)" 点击时触发手动执行
             -->
-            <el-button size="small" type="success" @click="runTask(row)" :loading="runningId===row.id" circle><el-icon><VideoPlay /></el-icon></el-button>
+            <el-button size="small" type="success" @click="runTask(row)" :loading="runningId===row.id" circle data-testid="btn-run-task"><el-icon><VideoPlay /></el-icon></el-button>
 
             <!--
               查看日志按钮：圆形默认按钮
               @click="showLogs(row)" 打开侧边抽屉显示该任务的执行历史
             -->
-            <el-button size="small" @click="showLogs(row)" circle><el-icon><Tickets /></el-icon></el-button>
+            <el-button size="small" @click="showLogs(row)" circle data-testid="btn-task-logs"><el-icon><Tickets /></el-icon></el-button>
 
             <!--
               删除按钮：使用 el-popconfirm 包裹，点击后弹出确认气泡
               title="Delete this task?" 确认气泡里显示的文字
               @confirm="deleteTask(row.id)" 用户点击"确认"后才真正删除
             -->
-            <el-popconfirm title="Delete this task?" @confirm="deleteTask(row.id)">
+            <el-popconfirm title="Delete this task?" @confirm="deleteTask(row.id)" data-testid="btn-delete-task">
               <!--
                 #reference 插槽：定义触发弹出框的元素
                 这里是红色圆形删除按钮
