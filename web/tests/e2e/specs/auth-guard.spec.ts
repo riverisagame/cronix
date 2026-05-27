@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Auth Guard', () => {
+  test.beforeEach(async ({ page }) => {
+    // Clear storage state to start unauthenticated
+    await page.evaluate(() => localStorage.clear())
+  })
+
   test('redirects to /login when accessing /tasks without auth', async ({ page }) => {
     await page.goto('/tasks')
     await expect(page).toHaveURL(/\/login/)

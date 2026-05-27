@@ -8,6 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { outputFolder: 'tests/e2e/report' }]],
   timeout: 30000,
+  globalSetup: 'tests/e2e/global-setup.ts',
   use: {
     baseURL: 'http://localhost:8080',
     browserName: 'chromium',
@@ -17,7 +18,10 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'tests/e2e/storage-state.json',
+      },
     },
   ],
   webServer: {

@@ -5,6 +5,8 @@ test.describe('Login', () => {
   let loginPage: LoginPage
 
   test.beforeEach(async ({ page }) => {
+    // Clear storage state to start unauthenticated
+    await page.evaluate(() => localStorage.clear())
     loginPage = new LoginPage(page)
   })
 

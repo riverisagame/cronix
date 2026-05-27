@@ -33,6 +33,11 @@ cronix-linux-amd64
 # Playwright MCP 临时文件
 .playwright-mcp/
 
+# Playwright E2E
+web/tests/e2e/storage-state.json
+web/tests/e2e/results/
+web/tests/e2e/report/
+
 # 临时脚本
 hash.txt
 set-passwd.py
