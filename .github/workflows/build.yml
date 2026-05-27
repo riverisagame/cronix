@@ -29,6 +29,10 @@ jobs:
           npm ci
           npm run build
 
+      - name: "Run frontend unit tests"
+        working-directory: web
+        run: npx vitest run
+
       # --- 后端 ---
       - uses: actions/setup-go@v5
         with:
@@ -220,7 +224,74 @@ jobs:
           echo "Server stopped"
 
   # ============================================================
-  # Job 3: 推送 tag 时自动创建 Release 并上传二进制
+  # Job 3: E2E tests with Playwright
+  # ============================================================
+  e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: "Install frontend deps"
+        working-directory: web
+        run: npm ci
+
+      - name: "Install Playwright browsers"
+        working-directory: web
+        run: npx playwright install chromium --with-deps
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: cronix-linux-amd64
+
+      - name: "Setup and start server"
+        run: |
+          chmod +x cronix-linux-amd64
+          cp config.yaml /tmp/e2e-config.yaml
+          python3 -c "
+          import yaml, bcrypt
+          cfg = yaml.safe_load(open('/tmp/e2e-config.yaml'))
+          cfg['auth']['password'] = bcrypt.hashpw(b'admin', bcrypt.gensalt()).decode()
+          with open('/tmp/e2e-config.yaml', 'w') as f:
+              yaml.dump(cfg, f)
+          "
+          sed -i 's|path: ./data/cronix.db|path: /tmp/e2e-test.db|' /tmp/e2e-config.yaml
+          ./cronix-linux-amd64 serve -c /tmp/e2e-config.yaml &
+          for i in $(seq 1 15); do
+            sleep 1
+            if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
+              echo "Server ready after ${i}s"
+              break
+            fi
+            if [ $i -eq 15 ]; then
+              echo "Server failed to start"
+              exit 1
+            fi
+          done
+
+      - name: "Run Playwright tests"
+        working-directory: web
+        run: npx playwright test
+
+      - name: "Upload test results on failure"
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            web/tests/e2e/results
+            web/tests/e2e/report
+          retention-days: 3
+
+  # ============================================================
+  # Job 4: 推送 tag 时自动创建 Release 并上传二进制
   # ============================================================
   release:
     if: startsWith(github.ref, 'refs/tags/v')
