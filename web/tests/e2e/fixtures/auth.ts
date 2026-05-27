@@ -2,13 +2,19 @@ import { Page } from '@playwright/test'
 
 export async function login(page: Page, username = 'admin', password = 'admin') {
   await page.goto('/login', { waitUntil: 'networkidle' })
-  // Wait for the Vue SPA to fully render the login form
   await page.waitForSelector('[data-testid="login-submit"]', { state: 'visible', timeout: 10000 })
   await page.fill('[data-testid="login-username"]', username)
   await page.fill('[data-testid="login-password"]', password)
-  await page.click('[data-testid="login-submit"]')
-  // The SPA uses router.push('/') after storing token — URL becomes /
-  await page.waitForURL('**/', { timeout: 15000 })
+
+  // Wait for the login API response and navigation together
+  await Promise.all([
+    page.waitForResponse(resp => resp.url().includes('/api/login') && resp.status() === 200, { timeout: 15000 }),
+    page.click('[data-testid="login-submit"]'),
+  ])
+
+  // After login API succeeds, the SPA stores token and calls router.push('/')
+  // Wait for dashboard content to appear instead of relying on URL detection
+  await page.waitForSelector('[data-testid="stat-total-tasks"]', { state: 'visible', timeout: 15000 })
 }
 
 export async function logout(page: Page) {

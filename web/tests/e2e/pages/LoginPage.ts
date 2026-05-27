@@ -19,6 +19,6 @@ export class LoginPage extends BasePage {
     await expect(this.page.locator('[data-testid="login-error"]')).toBeVisible({ timeout: 10000 })
   }
   async expectRedirectToDashboard() {
-    await this.page.waitForURL('**/', { timeout: 15000 })
+    await expect(this.page.locator('[data-testid="stat-total-tasks"]')).toBeVisible({ timeout: 15000 })
   }
 }
