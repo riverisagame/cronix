@@ -23,3 +23,14 @@ global.matchMedia = (query: string) => ({
   removeEventListener: () => {},
   dispatchEvent: () => false,
 }) as unknown as typeof window.matchMedia
+
+// Mock localStorage for unit tests that import axios (interceptor reads token at import time)
+const store = new Map<string, string>()
+global.localStorage = {
+  getItem: (key: string) => store.get(key) ?? null,
+  setItem: (key: string, value: string) => { store.set(key, value) },
+  removeItem: (key: string) => { store.delete(key) },
+  clear: () => { store.clear() },
+  get length() { return store.size },
+  key: (index: number) => Array.from(store.keys())[index] ?? null,
+} as unknown as Storage
