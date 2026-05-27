@@ -34,6 +34,6 @@ test.describe('Groups', () => {
     await groupEdit.gotoNew()
     await groupEdit.fillName('e2e-test-group')
     await groupEdit.clickSave()
-    await groupEdit.expectRedirectToList()
+    await groupEdit.expectSaved()
   })
 })

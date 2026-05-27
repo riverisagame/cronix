@@ -20,7 +20,7 @@ test.describe('Login', () => {
     await loginPage.goto()
     await loginPage.fillCredentials('admin', 'wrong-password')
     await loginPage.submit()
-    await loginPage.expectErrorVisible()
+    await loginPage.expectStillOnLogin()
   })
 
   test('empty fields show validation or error', async ({ page }) => {

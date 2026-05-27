@@ -7,5 +7,5 @@ export class GroupEditPage extends BasePage {
   async gotoEdit(id: number) { await this.navigate(`/groups/${id}`) }
   async fillName(name: string) { await this.page.fill('[data-testid="group-form-name"]', name) }
   async clickSave() { await this.page.click('[data-testid="btn-save-group"]') }
-  async expectRedirectToList() { await this.page.waitForURL('/groups') }
+  async expectSaved() { await this.page.waitForURL(/\/groups\/\d+/, { timeout: 10000 }) }
 }

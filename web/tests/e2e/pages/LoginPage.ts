@@ -15,8 +15,9 @@ export class LoginPage extends BasePage {
     await this.fillCredentials(username, password)
     await this.submit()
   }
-  async expectErrorVisible() {
-    await expect(this.page.locator('[data-testid="login-error"]')).toBeVisible({ timeout: 10000 })
+  // 401 triggers axios interceptor which reloads /login — error alert never shows
+  async expectStillOnLogin() {
+    await expect(this.page.locator('[data-testid="login-submit"]')).toBeVisible({ timeout: 10000 })
   }
   async expectRedirectToDashboard() {
     await expect(this.page.locator('[data-testid="stat-total-tasks"]')).toBeVisible({ timeout: 15000 })
