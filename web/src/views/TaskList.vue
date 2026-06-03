@@ -318,7 +318,7 @@
       size="700px" 抽屉宽度 700 像素
       direction="rtl" 从右侧滑出（Right To Left）
     -->
-    <el-drawer v-model="drawerVisible" :title="'History: '+logTaskName" size="750px" direction="rtl">
+    <el-drawer v-model="drawerVisible" :title="'History: '+logTaskName" size="66%" direction="rtl">
       <!--
         如果该任务的执行日志为空，显示提示信息
       -->
@@ -368,6 +368,9 @@
           </el-card>
         </el-timeline-item>
       </el-timeline>
+      <div v-if="taskLogs.length > 0" style="margin-top:16px;text-align:right">
+        <el-pagination v-model:current-page="historyPage" :total="historyTotal" :page-size="10" layout="total,prev,pager,next" @current-change="loadHistory" />
+      </div>
     </el-drawer>
   </div>
 </template>
@@ -569,6 +572,10 @@ const logTaskName = ref('')
 // 抽屉中显示的任务执行日志列表
 const taskLogs = ref<any[]>([])
 
+const historyPage = ref(1)
+const historyTotal = ref(0)
+const historyTaskId = ref<number | null>(null)
+
 /**
  * typeColor 函数：根据任务类型返回对应的 ElementPlus 标签颜色名。
  * 返回的对象是"映射表"：键是任务类型，值是 ElementPlus 的标签类型名。
@@ -655,10 +662,18 @@ async function toggleTask(row: any, val: boolean) {
  */
 async function showLogs(row: any) {
   logTaskName.value = row.name      // 记住任务名（抽屉标题用）
+  historyTaskId.value = row.id
+  historyPage.value = 1
   drawerVisible.value = true        // 打开抽屉
-  // 请求该任务的执行日志（第 1 页，每页 50 条）
-  const r = await taskAPI.getLogs(row.id, { page:1, page_size:50 })
+  await loadHistory()
+}
+
+async function loadHistory() {
+  if (!historyTaskId.value) return
+  // 请求该任务的执行日志
+  const r = await taskAPI.getLogs(historyTaskId.value, { page: historyPage.value, page_size: 10 })
   taskLogs.value = r.data.data.items || []  // 把日志列表存起来
+  historyTotal.value = r.data.data.total || 0
 }
 
 /**

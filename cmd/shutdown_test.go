@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -16,6 +17,9 @@ import (
 // 该测试通过启动子进程，发送 SIGINT 信号，并检查日志输出中是否包含优雅关闭物理资源的关键字。
 // 规则：测试不修改任何物理持久化表，只读/内存操作。
 func TestGracefulShutdownIntegration(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping graceful shutdown integration test on Windows because SIGINT is not supported by os.Process.Signal")
+	}
 	// 1. 准备测试用的临时工作目录和配置文件
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config_test.yaml")

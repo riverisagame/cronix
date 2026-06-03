@@ -48,7 +48,7 @@
     </el-card>
 
     <!-- Group execution logs drawer -->
-    <el-drawer v-model="drawerVisible" :title="'History: ' + logGroupName" size="750px" direction="rtl">
+    <el-drawer v-model="drawerVisible" :title="'History: ' + logGroupName" size="66%" direction="rtl">
       <div v-if="groupLogs.length===0" style="text-align:center;padding:40px;color:#909399">No executions yet</div>
       <el-timeline v-else>
         <el-timeline-item v-for="log in groupLogs" :key="log.id" :timestamp="log.start_time" placement="top"
@@ -65,6 +65,9 @@
           </el-card>
         </el-timeline-item>
       </el-timeline>
+      <div v-if="groupLogs.length > 0" style="margin-top:16px;text-align:right">
+        <el-pagination v-model:current-page="historyPage" :total="historyTotal" :page-size="10" layout="total,prev,pager,next" @current-change="loadHistory" />
+      </div>
       <div style="margin-top:12px;text-align:center">
         <el-popconfirm title="Clear all execution logs for this group?" @confirm="clearGroupLogs(logGroupId)">
           <template #reference><el-button size="small" type="danger" :loading="clearingLogs">Clear Group Logs</el-button></template>
@@ -90,6 +93,9 @@ const logGroupName = ref('')
 const logGroupId = ref(0)
 const groupLogs = ref<any[]>([])
 const clearingLogs = ref(false)
+
+const historyPage = ref(1)
+const historyTotal = ref(0)
 
 async function load() {
   loading.value = true
@@ -119,10 +125,17 @@ async function deleteGroup(id: number, name: string) {
 
 async function showLogs(row: any) {
   logGroupName.value = row.name; logGroupId.value = row.id; drawerVisible.value = true
+  historyPage.value = 1
+  await loadHistory()
+}
+
+async function loadHistory() {
+  if (!logGroupId.value) return
   try {
-    const r = await groupAPI.getLogs(row.id, { page: 1, page_size: 50 })
+    const r = await groupAPI.getLogs(logGroupId.value, { page: historyPage.value, page_size: 10 })
     groupLogs.value = r.data.data.items || []
-  } catch { groupLogs.value = [] }
+    historyTotal.value = r.data.data.total || 0
+  } catch { groupLogs.value = []; historyTotal.value = 0 }
 }
 
 async function clearGroupLogs(id: number) {

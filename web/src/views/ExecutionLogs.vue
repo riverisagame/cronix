@@ -42,23 +42,26 @@
         </el-col>
       </el-row>
 
-      <el-table-v2
-        :columns="columns"
-        :data="logs"
-        :width="1300"
-        :height="600"
-        :row-height="40"
-        :row-event-handlers="rowEventHandlers"
-        fixed
-        style="cursor:pointer"
-      />
+      <el-auto-resizer>
+        <template #default="{ width }">
+          <el-table-v2
+            :columns="columns"
+            :data="logs"
+            :width="width"
+            :height="600"
+            :row-height="56"
+            :row-event-handlers="rowEventHandlers"
+            style="cursor:pointer"
+          />
+        </template>
+      </el-auto-resizer>
 
       <div style="margin-top:16px;text-align:right">
         <el-pagination v-model:current-page="page" :total="total" :page-size="20" layout="total,prev,pager,next" @current-change="load" />
       </div>
     </el-card>
 
-    <el-drawer v-model="drawerVisible" title="Execution Detail" size="900px" direction="rtl">
+    <el-drawer v-model="drawerVisible" title="Execution Detail" size="66%" direction="rtl">
       <div v-if="detailLoading" style="text-align:center;padding:40px;color:#909399" v-loading="true">Loading...</div>
       <template v-else-if="detail">
         <div style="display:flex;gap:10px;margin-bottom:16px">
@@ -92,7 +95,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
-import { ElTableV2, ElTag } from 'element-plus'
+import { ElTableV2, ElTag, ElAutoResizer } from 'element-plus'
 import type { Column } from 'element-plus'
 import { logAPI } from '../api/index'
 import { Search, Refresh } from '@element-plus/icons-vue'
@@ -130,11 +133,11 @@ function formatTime(iso: string): string {
 const columns: Column<any>[] = [
   /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
   {
-    key: 'id', title: 'ID', width: 60, dataKey: 'id',
+    key: 'id', title: 'ID', width: 80, dataKey: 'id',
     cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad' }, cellData)
   },
-  { key: 'task_name', title: 'Task', width: 140, dataKey: 'task_name' },
-  { key: 'group_name', title: 'Group', width: 110, dataKey: 'group_name' },
+  { key: 'task_name', title: 'Task', width: 160, flexGrow: 1, dataKey: 'task_name' },
+  { key: 'group_name', title: 'Group', width: 130, flexGrow: 1, dataKey: 'group_name' },
   {
     key: 'status', title: 'Status', width: 100, dataKey: 'status',
     cellRenderer: ({ cellData }: any) => {
@@ -143,9 +146,9 @@ const columns: Column<any>[] = [
       return h(ElTag, { type, size: 'small' }, () => val.toUpperCase())
     }
   },
-  { key: 'trigger_type', title: 'Trigger', width: 80, dataKey: 'trigger_type' },
+  { key: 'trigger_type', title: 'Trigger', width: 90, dataKey: 'trigger_type' },
   {
-    key: 'start_time', title: 'Time', width: 160, dataKey: 'start_time',
+    key: 'start_time', title: 'Time', width: 180, flexGrow: 1, dataKey: 'start_time',
     cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#8a8d98' }, formatTime(cellData))
   },
   {
@@ -153,7 +156,7 @@ const columns: Column<any>[] = [
     cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad' }, cellData !== null ? String(cellData) : '-')
   },
   {
-    key: 'error_msg', title: 'Preview', width: 220, dataKey: 'error_msg',
+    key: 'error_msg', title: 'Preview', width: 300, flexGrow: 4, dataKey: 'error_msg',
     cellRenderer: ({ cellData, rowData }: any) => {
       const output = rowData?.output || ''
       const errMsg = cellData || ''
