@@ -232,14 +232,14 @@ const isLoginPage = computed(() => route.path === '/login')
     > Microsoft YaHei（微软雅黑）> Arial（通用英文字体）> sans-serif（系统默认无衬线字体）
 */
 :root {
-  --bg-color: #0F172A;
-  --surface-color: #1E293B;
-  --primary-color: #3B82F6;
+  --bg-color: #050505; /* Almost true black for maximum contrast */
+  --surface-color: #171717; /* Very dark gray for cards */
+  --primary-color: #3B82F6; /* Kept bright blue for CTA */
   --secondary-color: #60A5FA;
   --cta-color: #F97316;
-  --text-main: #F8FAFC;
-  --text-secondary: #94A3B8;
-  --border-color: #334155;
+  --text-main: #FFFFFF; /* Pure white for maximum readability */
+  --text-secondary: #D4D4D8; /* Light gray to maintain high contrast */
+  --border-color: #3F3F46; /* Noticeable borders */
   --success-color: #10B981;
   --error-color: #EF4444;
   --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
@@ -256,7 +256,7 @@ const isLoginPage = computed(() => route.path === '/login')
   --el-border-color-lighter: var(--border-color);
   --el-fill-color-blank: var(--surface-color);
   --el-fill-color: var(--border-color);
-  --el-fill-color-light: #334155;
+  --el-fill-color-light: #262626; /* Hover effects for buttons/inputs */
 }
 
 body {
@@ -292,7 +292,7 @@ body {
   --el-table-header-bg-color: var(--surface-color) !important;
   --el-table-header-text-color: var(--text-main) !important;
   --el-table-text-color: var(--text-main) !important;
-  --el-table-row-hover-bg-color: #334155 !important;
+  --el-table-row-hover-bg-color: #262626 !important;
   --el-table-bg-color: var(--surface-color) !important;
   --el-table-tr-bg-color: var(--surface-color) !important;
   background-color: var(--surface-color) !important;
