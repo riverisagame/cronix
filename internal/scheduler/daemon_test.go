@@ -5,6 +5,7 @@ import (
 	"cronix/internal/config"
 	"cronix/internal/model"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -103,12 +104,17 @@ func TestDaemonMonitor_KeepAlive(t *testing.T) {
 func TestDaemonMonitor_Stop(t *testing.T) {
 	db := setupDaemonTestDB(t)
 
+	cmdStr := "sleep 100"
+	if runtime.GOOS == "windows" {
+		cmdStr = "ping 127.0.0.1 -n 100 > NUL"
+	}
+
 	// 创建一个长久挂起运行的 shell 任务（sleep 100）
 	task := model.Task{
 		ID:                 102,
 		Name:               "daemon-long-sleep",
 		TaskType:           "shell",
-		Command:            "sleep 100", // 长久挂起
+		Command:            cmdStr, // 长久挂起
 		Enabled:            true,
 		TimeoutSec:         300,
 		RunMode:            "daemon",

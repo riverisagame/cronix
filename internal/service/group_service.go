@@ -4,15 +4,14 @@ import (
     "fmt"
 
     "cronix/internal/model"
-    "cronix/internal/scheduler"
 
     "gorm.io/gorm"
 )
 
 type GroupService struct {
 	DB      *gorm.DB
-	Engine  *scheduler.Engine
-	ExecSvc *ExecutionService // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+	Engine  GroupReloader
+	ExecSvc StatsInvalidator // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
 }
 
 func (s *GroupService) ListGroups() ([]model.TaskGroup, error) {

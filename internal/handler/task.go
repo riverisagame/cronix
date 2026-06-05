@@ -307,13 +307,25 @@ func (h *TaskHandler) StopDaemon(c *gin.Context) {
 func (h *TaskHandler) GetDaemonStatus(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
     if h.DaemonMon == nil {
-        c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "daemon monitor not initialized"})
+        c.JSON(http.StatusOK, gin.H{"code": 0, "message": "daemon monitor disabled", "data": nil})
         return
     }
     state, exists := h.DaemonMon.GetDaemonState(uint(id))
     if !exists {
-        c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "daemon state not found"})
+        c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"status": "STOPPED"}})
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": state})
+}
+
+// GetAllDaemonStates 批量获取所有常驻守护任务的状态
+// 路由：GET /api/daemon/states
+// @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+func (h *TaskHandler) GetAllDaemonStates(c *gin.Context) {
+    if h.DaemonMon == nil {
+        c.JSON(http.StatusOK, gin.H{"code": 0, "message": "daemon monitor disabled", "data": make(map[string]interface{})})
+        return
+    }
+    states := h.DaemonMon.GetAllDaemonStates()
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": states})
 }

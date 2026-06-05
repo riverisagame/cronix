@@ -11,17 +11,16 @@ package service
 import (
     "fmt"                            // 格式化输出
     "cronix/internal/model"          // 数据模型
-    "cronix/internal/scheduler"      // 调度器：重新加载任务
     "gorm.io/gorm"                   // GORM数据库操作
 )
 
 // TaskService 是任务管理的业务服务层
 // 它持有数据库连接和调度引擎，用来操作任务和通知调度器
 type TaskService struct {
-	DB        *gorm.DB                 // 数据库连接对象
-	Engine    *scheduler.Engine        // 定时调度引擎（任务变更后要通知它重新加载）
-	ExecSvc   *ExecutionService        // 执行日志服务层（用于缓存失效） // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
-	DaemonMon *scheduler.DaemonMonitor // 守护控制器：热更新 daemon 任务
+	DB        *gorm.DB         // 数据库连接对象
+	Engine    TaskReloader     // 定时调度引擎（任务变更后要通知它重新加载）
+	ExecSvc   StatsInvalidator // 执行日志服务层（用于缓存失效） // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+	DaemonMon DaemonReloader   // 守护控制器：热更新 daemon 任务
 }
 
 // ListTasks 返回分页的任务列表，支持按名称搜索

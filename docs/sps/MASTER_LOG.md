@@ -8,3 +8,4 @@
 | 2026-06-05 | Task-04 | executor, scheduler | docs/sps/plans/20260605_linux_log_and_resource_limits.md | FINISH |
 | 2026-06-05 | Task-05 | scheduler, model, handler | docs/sps/plans/20260605_daemon_supervisor_feature.md | FINISH |
 | 2026-06-05 | Task-05 | Daemon Supervisor | docs/sps/plans/20260605_daemon_frontend_plan.md | [COMPLETE] |
+| 2026-06-05 | Task-06 | service, scheduler | docs/sps/plans/20260605_interface_segregation_plan.md | FINISH |
