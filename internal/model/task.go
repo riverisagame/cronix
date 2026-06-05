@@ -140,6 +140,27 @@ type Task struct {
     // GroupName 任务组名称（查询时计算，不存入数据库）
     GroupName string `gorm:"-" json:"group_name,omitempty"`
 
+    // ================================================================
+    // 以下字段为常驻守护进程 (Daemon / Supervisor) 模式专用
+    // @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+    // ================================================================
+
+    // RunMode 运行模式：决定任务的生命周期管理方式
+    //   "cron"  (默认) = 定时触发，短生命周期任务，执行完即退出
+    //   "daemon"       = 常驻守护，启动后长驻后台，异常退出时自动拉起
+    RunMode string `gorm:"default:cron" json:"run_mode,omitempty"`
+
+    // RestartPolicy 重启策略（仅 daemon 模式生效）
+    //   "always"     (默认) = 无论退出码如何，总是自动重启
+    //   "on-failure"       = 仅在非零退出码（崩溃/异常）时重启
+    //   "never"            = 退出后保持停止状态，不自动重启
+    RestartPolicy string `gorm:"default:always" json:"restart_policy,omitempty"`
+
+    // MaxRestartAttempts 最大连续重启尝试次数（仅 daemon 模式生效）
+    // 连续失败超过此阈值后，守护状态将被置为 FATAL（熔断），不再自动拉起
+    // 默认值 10 次
+    MaxRestartAttempts int `gorm:"default:10" json:"max_restart_attempts,omitempty"`
+
     // WorkDir 工作目录（shell 任务在哪个文件夹下面执行）
     // 比如指定为 "/home/user/scripts"，执行命令时会先切换到这个目录
     // 选填，不写就在当前目录下执行

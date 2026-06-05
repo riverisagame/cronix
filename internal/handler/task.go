@@ -23,6 +23,7 @@ type TaskHandler struct {
     TaskSvc   *service.TaskService     // 任务服务：处理任务的增删改查业务逻辑
     ExecSvc   *service.ExecutionService // 执行日志服务：查询任务的运行记录
     Executor  *scheduler.Executor      // 执行器：手动触发任务时用到的底层引擎
+    DaemonMon *scheduler.DaemonMonitor // 常驻守护控制器：管理 daemon 模式任务的启停
 }
 
 // validateTask 校验任务输入，返回错误信息或空串
@@ -270,4 +271,49 @@ func (h *TaskHandler) UpdateTaskDeps(c *gin.Context) {
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})    // 更新成功
+}
+
+// ================================================================
+// 常驻守护进程 (Daemon / Supervisor) 管理 API
+// @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+// ================================================================
+
+// StartDaemon 手动启动一个常驻守护任务
+// 路由：POST /api/tasks/:id/daemon/start
+func (h *TaskHandler) StartDaemon(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    if h.DaemonMon == nil {
+        c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "daemon monitor not initialized"})
+        return
+    }
+    h.DaemonMon.StartDaemon(uint(id))
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "daemon start signal sent"})
+}
+
+// StopDaemon 手动停止一个常驻守护任务
+// 路由：POST /api/tasks/:id/daemon/stop
+func (h *TaskHandler) StopDaemon(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    if h.DaemonMon == nil {
+        c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "daemon monitor not initialized"})
+        return
+    }
+    h.DaemonMon.StopDaemon(uint(id))
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "daemon stop signal sent"})
+}
+
+// GetDaemonStatus 查询常驻守护任务的当前运行状态
+// 路由：GET /api/tasks/:id/daemon/status
+func (h *TaskHandler) GetDaemonStatus(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    if h.DaemonMon == nil {
+        c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "daemon monitor not initialized"})
+        return
+    }
+    state, exists := h.DaemonMon.GetDaemonState(uint(id))
+    if !exists {
+        c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "daemon state not found"})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": state})
 }

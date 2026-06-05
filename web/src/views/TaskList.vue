@@ -99,13 +99,18 @@
         </el-table-column>
 
         <!--
-          Cron 表达式列
-          cron_expr 是定时任务的调度表达式，比如 "0 30 8 * * *" 表示每天 8:30
+          Cron 表达式列 或 常驻任务状态列
         -->
-        <el-table-column prop="cron_expr" label="Cron" width="140">
+        <el-table-column label="Cron / Mode" width="160">
           <template #default="{ row }">
-            <!-- 用 el-tag 标签显示 Cron 表达式，type="info" 灰色标签 -->
-            <el-tag size="small" type="info">{{ row.cron_expr }}</el-tag>
+            <template v-if="row.run_mode === 'daemon'">
+              <el-tag size="small" :type="daemonStatusColor(getDaemonStatus(row.id))">{{ getDaemonStatus(row.id) }}</el-tag>
+              <div v-if="getDaemonStatus(row.id) === 'RUNNING'" style="font-size:12px;color:#909399;margin-top:2px">Up: {{ formatUptime(getDaemonUptime(row.id)) }}</div>
+            </template>
+            <template v-else>
+              <!-- 用 el-tag 标签显示 Cron 表达式，type="info" 灰色标签 -->
+              <el-tag size="small" type="info">{{ row.cron_expr || 'None' }}</el-tag>
+            </template>
           </template>
         </el-table-column>
 
@@ -170,11 +175,15 @@
             <el-button size="small" type="primary" @click="router.push('/tasks/'+row.id)" circle><el-icon><Edit /></el-icon></el-button>
 
             <!--
-              手动执行按钮：圆形绿色按钮
-              :loading="runningId===row.id" 只有正在执行的那一行按钮显示加载动画
-              @click="runTask(row)" 点击时触发手动执行
+              执行/启停按钮：根据任务模式区分
             -->
-            <el-button size="small" type="success" @click="runTask(row)" :loading="runningId===row.id" circle data-testid="btn-run-task"><el-icon><VideoPlay /></el-icon></el-button>
+            <template v-if="row.run_mode === 'daemon'">
+              <el-button size="small" type="success" @click="startDaemonTask(row)" :disabled="getDaemonStatus(row.id) === 'RUNNING'" circle title="Start Daemon"><el-icon><VideoPlay /></el-icon></el-button>
+              <el-button size="small" type="danger" @click="stopDaemonTask(row)" :disabled="getDaemonStatus(row.id) === 'STOPPED' || getDaemonStatus(row.id) === 'FATAL'" circle title="Stop Daemon"><el-icon><VideoPause /></el-icon></el-button>
+            </template>
+            <template v-else>
+              <el-button size="small" type="success" @click="runTask(row)" :loading="runningId===row.id" circle data-testid="btn-run-task" title="Run Once"><el-icon><VideoPlay /></el-icon></el-button>
+            </template>
 
             <!--
               查看日志按钮：圆形默认按钮
@@ -377,18 +386,76 @@
 
 <script setup lang="ts">
 // 导入 Vue 的响应式工具
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 // 导入路由工具
 import { useRouter } from 'vue-router'
 // 导入任务 API 函数
-import { taskAPI } from '../api/index'
+import { taskAPI, daemonAPI } from '../api/index'
 // 导入图标组件
-import { Plus, Search, Refresh, VideoPlay, Delete, Edit, Tickets } from '@element-plus/icons-vue'
+import { Plus, Search, Refresh, VideoPlay, VideoPause, Delete, Edit, Tickets } from '@element-plus/icons-vue'
 // ElMessage 是 ElementPlus 的消息提示工具（用来在页面上方弹出"操作成功"等提示）
 import { ElMessage } from 'element-plus'
 
 // 获取路由跳转工具
 const router = useRouter()
+
+// 常驻任务相关状态
+const daemonStates = ref<Record<number, any>>({})
+let daemonTimer: any = null
+
+const fetchDaemonStates = async () => {
+  try {
+    const res: any = await daemonAPI.getAllStates()
+    if (res && res.data) {
+      daemonStates.value = res.data
+    }
+  } catch (e) {
+    console.error('Failed to fetch daemon states', e)
+  }
+}
+
+const getDaemonStatus = (id: number) => {
+  return daemonStates.value[id]?.status || 'STOPPED'
+}
+
+const getDaemonUptime = (id: number) => {
+  return daemonStates.value[id]?.uptime || 0
+}
+
+const formatUptime = (seconds: number) => {
+  if (seconds < 60) return Math.floor(seconds) + 's'
+  if (seconds < 3600) return Math.floor(seconds/60) + 'm ' + Math.floor(seconds%60) + 's'
+  return Math.floor(seconds/3600) + 'h ' + Math.floor((seconds%3600)/60) + 'm'
+}
+
+const daemonStatusColor = (status: string) => {
+  switch (status) {
+    case 'RUNNING': return 'success'
+    case 'FATAL': return 'danger'
+    case 'BACKOFF': return 'warning'
+    default: return 'info'
+  }
+}
+
+const startDaemonTask = async (row: any) => {
+  try {
+    await taskAPI.startDaemon(row.id)
+    ElMessage.success('Daemon start triggered')
+    fetchDaemonStates()
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.error || 'Failed to start daemon')
+  }
+}
+
+const stopDaemonTask = async (row: any) => {
+  try {
+    await taskAPI.stopDaemon(row.id)
+    ElMessage.success('Daemon stop triggered')
+    fetchDaemonStates()
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.error || 'Failed to stop daemon')
+  }
+}
 
 // 视图切换状态：'table' 列表视图，'topology' 依赖拓扑图视图
 // @Ref: docs/sps/plans/20260527_topology_shutdown_plan.md | @Date: 2026-05-27
@@ -680,7 +747,17 @@ async function loadHistory() {
  * onMounted(load)：页面加载完成后，立刻执行 load() 函数。
  * 也就是一进这个页面，就自动从后端拉取任务列表数据。
  */
-onMounted(load)
+onMounted(() => {
+  load()
+  fetchDaemonStates()
+  daemonTimer = setInterval(fetchDaemonStates, 3000)
+})
+
+onUnmounted(() => {
+  if (daemonTimer) {
+    clearInterval(daemonTimer)
+  }
+})
 </script>
 
 <style scoped>

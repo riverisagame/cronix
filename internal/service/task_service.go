@@ -18,9 +18,10 @@ import (
 // TaskService 是任务管理的业务服务层
 // 它持有数据库连接和调度引擎，用来操作任务和通知调度器
 type TaskService struct {
-	DB      *gorm.DB           // 数据库连接对象
-	Engine  *scheduler.Engine  // 定时调度引擎（任务变更后要通知它重新加载）
-	ExecSvc *ExecutionService  // 执行日志服务层（用于缓存失效） // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+	DB        *gorm.DB                 // 数据库连接对象
+	Engine    *scheduler.Engine        // 定时调度引擎（任务变更后要通知它重新加载）
+	ExecSvc   *ExecutionService        // 执行日志服务层（用于缓存失效） // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+	DaemonMon *scheduler.DaemonMonitor // 守护控制器：热更新 daemon 任务
 }
 
 // ListTasks 返回分页的任务列表，支持按名称搜索
@@ -140,6 +141,12 @@ func (s *TaskService) UpdateTask(id uint, updates map[string]interface{}) error 
 	if s.ExecSvc != nil {
 		s.ExecSvc.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
 	}
+	
+	// @Ref: docs/sps/decisions/20260605_architect_review_daemon_supervisor.md | @Date: 2026-06-05
+	// 热更新：如果是常驻守护任务，通知 DaemonMonitor 热重载；否则走旧逻辑
+	if s.DaemonMon != nil {
+		s.DaemonMon.ReloadDaemon(updatedTask)
+	}
 	return s.Engine.UpdateTaskSchedule(updatedTask) // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
 }
 
@@ -162,6 +169,9 @@ func (s *TaskService) DeleteTask(id uint) error {
 	s.Engine.RemoveTaskSchedule(id) // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
 	if s.ExecSvc != nil {
 		s.ExecSvc.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+	}
+	if s.DaemonMon != nil {
+		s.DaemonMon.StopDaemon(id)
 	}
 	return nil
 }

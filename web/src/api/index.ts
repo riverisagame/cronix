@@ -99,7 +99,12 @@ export const taskAPI = {
    * @param depIds 依赖任务的 ID 数组，如 [2, 3, 5]
    * 注意：后端接收的字段名是 dep_ids（下划线命名），不是 depIds（驼峰命名）
    */
-  updateDeps(id: number, depIds: number[]) { return api.put('/tasks/' + id + '/deps', { dep_ids: depIds }) }
+  updateDeps(id: number, depIds: number[]) { return api.put('/tasks/' + id + '/deps', { dep_ids: depIds }) },
+
+  // @Ref: docs/sps/plans/20260605_daemon_frontend_plan.md | @Date: 2026-06-05
+  startDaemon(id: number) { return api.post('/tasks/' + id + '/daemon/start') },
+  stopDaemon(id: number) { return api.post('/tasks/' + id + '/daemon/stop') },
+  getDaemonStatus(id: number) { return api.get('/tasks/' + id + '/daemon/status') }
 }
 
 /**
@@ -154,4 +159,12 @@ export const groupAPI = {
   setMembers(id: number, taskIDs: number[]) { return api.put('/groups/' + id + '/members', { task_ids: taskIDs }) },
   run(id: number) { return api.post('/groups/' + id + '/run') },
   getLogs(id: number, params?: any) { return api.get('/groups/' + id + '/logs', { params }) },
+}
+
+/**
+ * daemonAPI：全局常驻任务状态管理 API
+ * @Ref: docs/sps/plans/20260605_daemon_frontend_plan.md | @Date: 2026-06-05
+ */
+export const daemonAPI = {
+  getAllStates() { return api.get('/daemon/states') }
 }

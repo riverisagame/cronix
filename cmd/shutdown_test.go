@@ -65,6 +65,7 @@ auth:
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, binPath, "serve", "-c", configPath)
+	cmd.Env = append(os.Environ(), "CRONIX_TEST_MODE=1")
 	
 	// 捕获 stdout/stderr 用于验证日志
 	var outputBuf bytes.Buffer

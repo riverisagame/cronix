@@ -284,8 +284,9 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		cfg = &config.Config{}
 	}
 
-	// 1. 创建独立的超时上下文
-	tCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
+	// 1. 创建独立的超时上下文（基于传入的 ctx，支持外部取消信号传导）
+	// @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+	tCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
 	// 2. 准备执行日志路径并初始化 TaskLogWriter

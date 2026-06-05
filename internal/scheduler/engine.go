@@ -90,6 +90,11 @@ func (e *Engine) ReloadAll() error {
     var skipped int                                             // 跳过的无效任务计数
     for _, task := range tasks {                                // 遍历所有查询到的任务
         taskID := task.ID                                       // 保存任务ID（闭包用，避免循环变量问题）
+        // 常驻守护模式的任务不注册定时器，由 DaemonMonitor 托管
+        // @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+        if task.RunMode == "daemon" {
+            continue
+        }
         // 没有 cron 表达式的任务不注册定时器（由 group 触发或手动执行）
         if task.CronExpr == "" {
             continue
@@ -169,6 +174,12 @@ func (e *Engine) RemoveTaskSchedule(taskID uint) {
 func (e *Engine) UpdateTaskSchedule(task model.Task) error {
 	// First, safely remove any existing schedule for this task.
 	e.RemoveTaskSchedule(task.ID)
+
+	// 常驻守护模式的任务不注册定时器，由 DaemonMonitor 托管
+	// @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+	if task.RunMode == "daemon" {
+		return nil
+	}
 
 	// If the task is not eligible for scheduling, we are done.
 	if !task.Enabled || task.CronExpr == "" || task.GroupID != nil {

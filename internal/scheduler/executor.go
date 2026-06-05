@@ -334,11 +334,51 @@ func (e *Executor) executeTask(taskID uint) {
     e.notifyTaskResult(&task, &execLog)
 }
 
+// ExecuteTaskWithContext 带上下文的任务执行（供 DaemonMonitor 调用）
+// 当 ctx 被取消时，底层 ExecuteShell 会收到取消信号并强杀进程组
+// @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+func (e *Executor) ExecuteTaskWithContext(ctx context.Context, taskID uint) {
+    // 第一步：从数据库查询任务详情
+    var task model.Task
+    if err := e.db.First(&task, taskID).Error; err != nil {
+        log.Error().Err(err).Uint("task_id", taskID).Msg("fetch task failed")
+        return
+    }
+
+    // 第二步：创建一条执行日志记录
+    now := time.Now()
+    execLog := model.ExecutionLog{
+        TaskID:      &task.ID,
+        TaskName:    task.Name,
+        CronExpr:    task.CronExpr,
+        Status:      "running",
+        TriggerType: "daemon",
+        StartTime:   now,
+    }
+    e.db.Create(&execLog)
+    log.Info().Str("task", task.Name).Uint("id", task.ID).Msg("daemon executing task")
+
+    // 第三步：执行任务（常驻任务不重试，由 DaemonMonitor 统一管理重启策略）
+    timeout := task.TimeoutSec
+    if maxTO := e.cfg.Executor.MaxTimeoutSec; maxTO > 0 && timeout > maxTO {
+        timeout = maxTO
+    }
+    e.runTaskByTypeCtx(ctx, &task, &execLog, timeout)
+
+    // 第四步：发送通知
+    e.notifyTaskResult(&task, &execLog)
+}
+
 // runTaskByType 根据任务的类型（shell/http/cleanup/healthcheck）执行实际操作
 // 参数 task：任务对象
 // 参数 execLog：执行日志对象（会被修改）
 func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog, timeoutSec int) {
-    ctx := context.Background()                                  // 创建一个空的上下文
+    e.runTaskByTypeCtx(context.Background(), task, execLog, timeoutSec)
+}
+
+// runTaskByTypeCtx 带上下文版本的任务执行分发，可以通过 ctx 取消来即时强杀子进程
+// @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execLog *model.ExecutionLog, timeoutSec int) {
     now := time.Now()
     execLog.EndTime = &now                                       // 记录结束时间
     truncateKB := e.cfg.Executor.OutputTruncateKB                // 输出截断大小（KB）

@@ -68,6 +68,12 @@ func SetupRouter(
         api.GET("/tasks/:id/deps", taskH.GetTaskDeps)          // 查询任务依赖关系
         api.PUT("/tasks/:id/deps", taskH.UpdateTaskDeps)       // 更新任务依赖关系
 
+        // ---- 常驻守护进程管理 ----
+        // @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+        api.POST("/tasks/:id/daemon/start", taskH.StartDaemon)    // 手动启动常驻守护任务
+        api.POST("/tasks/:id/daemon/stop", taskH.StopDaemon)      // 手动停止常驻守护任务
+        api.GET("/tasks/:id/daemon/status", taskH.GetDaemonStatus) // 查询常驻守护任务状态
+
         // ---- 日志和仪表盘 ----
         api.GET("/logs", logH.GetAllLogs)                      // 获取所有日志
         api.DELETE("/logs", logH.ClearAllLogs)                 // 清空所有日志

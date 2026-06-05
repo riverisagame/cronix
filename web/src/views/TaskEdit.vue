@@ -48,13 +48,35 @@
           <el-input v-model="form.name" placeholder="e.g. backup-database" data-testid="task-form-name" />
         </el-form-item>
 
+        <el-form-item label="Run Mode">
+          <el-radio-group v-model="form.run_mode">
+            <el-radio-button value="cron">Cron Schedule</el-radio-button>
+            <el-radio-button value="daemon">Daemon Service</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- 常驻任务特有字段：Restart Policy -->
+        <el-form-item label="Restart Policy" v-if="form.run_mode === 'daemon'">
+          <el-select v-model="form.restart_policy" style="width:200px">
+            <el-option label="Always" value="always" />
+            <el-option label="On Failure" value="on-failure" />
+            <el-option label="Never" value="never" />
+          </el-select>
+        </el-form-item>
+
+        <!-- 常驻任务特有字段：Max Restart Attempts -->
+        <el-form-item label="Max Retries" v-if="form.run_mode === 'daemon'">
+          <el-input-number v-model="form.max_restart_attempts" :min="0" :max="100" />
+          <span style="margin-left:10px;font-size:12px;color:#909399">0 means unlimited</span>
+        </el-form-item>
+
         <!--
           Cron 表达式（必填项）
           Cron 是一种时间调度语法：5 个字段分别表示分、时、日、月、星期
           例如 "0 30 8 * * *" 表示每天上午 8:30 执行
           星号 * 表示"每一个"（每天、每月等）
         -->
-        <el-form-item label="Cron Expression">
+        <el-form-item label="Cron Expression" v-if="form.run_mode === 'cron'">
           <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）" data-testid="task-form-cron"
             @input="onCronInput" />
           <!-- 快捷宏 -->
@@ -275,7 +297,7 @@ const saving = ref(false)
  *   enabled: 是否启用，默认 true（启用）
  *   description: 任务描述（空）
  */
-const form = ref<any>({ name:'', cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'root', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+const form = ref<any>({ name:'', run_mode:'cron', restart_policy:'always', max_restart_attempts:10, cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'root', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
 const groupList = ref<any[]>([])
 const availableDepTasks = ref<any[]>([])
 

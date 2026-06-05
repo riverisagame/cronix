@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Content \"D:\\\\claudeprj\\\\codex\\\\internal\\\\database\\\\database.go\" -Encoding UTF8 | Select-Object -Index \\(134\\) | ForEach-Object { [System.Text.Encoding]::UTF8.GetBytes\\($_\\) | ForEach-Object { '{0:X2}' -f $_ }; Write-Host '' })",
+      "Bash(git checkout *)",
+      "Bash(go build *)",
+      "Bash(git add *)",
+      "Bash(git commit -m '@ *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit *)",
+      "Bash(npm run *)",
+      "PowerShell(go build *)",
+      "PowerShell(go test *)",
+      "Bash(go test *)",
+      "Bash(git -C D:/claudeprj/codex add internal/database/database.go internal/handler/log.go internal/service/execution_service.go internal/service/group_service.go web/src/views/ExecutionLogs.vue)",
+      "Bash(git -C D:/claudeprj/codex commit -m \"fix: address code review findings — event payload, error checks, transaction, logging\")",
+      "Bash(wsl *)",
+      "Bash(git -C D:/claudeprj/codex add internal/service/group_service_test.go)",
+      "Bash(git -C D:/claudeprj/codex commit -m \"fix: add GroupExecutionLog to test AutoMigrate for transactional DeleteGroup\")",
+      "Bash(git *)",
+      "Bash(node *)"
+    ]
+  }
+}

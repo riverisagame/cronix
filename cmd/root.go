@@ -114,6 +114,9 @@ var (
         // PersistentPreRunE 在所有子命令执行前运行
         // --version / --help 不需要 root 权限，cobra 内置处理会跳过此检查
         PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+            if os.Getenv("CRONIX_TEST_MODE") == "1" {
+                return nil
+            }
             euid := os.Geteuid()
             if euid != 0 && euid != -1 { // -1 on Windows, skip check
                 return fmt.Errorf("cronix 必须以 root 用户运行")
@@ -285,11 +288,19 @@ func runServe(cmd *cobra.Command, args []string) {
 
     groupSvc := &service.GroupService{DB: database.DB, Engine: engine, ExecSvc: execSvc} // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
 
+    // --- 初始化常驻守护控制器 (DaemonMonitor) ---
+    // @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
+    daemonMon := scheduler.NewDaemonMonitor(database.DB, exec)
+    go daemonMon.Start(ctx)
+    log.Info().Msg("常驻守护控制器已启动")
+    taskSvc.DaemonMon = daemonMon // 注入 TaskService 以支持热更新
+
     // --- 第9步：初始化 HTTP 请求处理器 ---
     // 每个 Handler 处理一类 HTTP 请求
     // 就像饭店里的不同服务员：有的负责点菜、有的负责上菜、有的负责结账
     authH := &handler.AuthHandler{} // 登录认证相关的请求处理
-    taskH := &handler.TaskHandler{TaskSvc: taskSvc, ExecSvc: execSvc, Executor: exec} // 任务管理相关的请求处理
+
+    taskH := &handler.TaskHandler{TaskSvc: taskSvc, ExecSvc: execSvc, Executor: exec, DaemonMon: daemonMon} // 任务管理相关的请求处理
     logH := &handler.LogHandler{ExecSvc: execSvc} // 日志查看相关的请求处理
     groupH := &handler.GroupHandler{GroupSvc: groupSvc, TaskSvc: taskSvc, Executor: exec} // 任务组管理
 

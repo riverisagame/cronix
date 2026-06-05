@@ -44,3 +44,4 @@ set-passwd.py
 prod-test.sh
 stress-test.sh
 test-suite.sh
+cronix
