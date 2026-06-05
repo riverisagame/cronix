@@ -406,8 +406,8 @@ let daemonTimer: any = null
 const fetchDaemonStates = async () => {
   try {
     const res: any = await daemonAPI.getAllStates()
-    if (res && res.data) {
-      daemonStates.value = res.data
+    if (res && res.data && res.data.data) {
+      daemonStates.value = res.data.data
     }
   } catch (e) {
     console.error('Failed to fetch daemon states', e)

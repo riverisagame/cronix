@@ -41,8 +41,8 @@
       <el-menu
         :default-active="activeMenu"
         router
-        background-color="#ffffff"
-        text-color="#475569"
+        background-color="var(--surface-color)"
+        text-color="var(--text-secondary)"
         active-text-color="var(--primary-color)"
         style="height:100%;border-right:1px solid var(--border-color)"
       >
@@ -104,7 +104,7 @@
         页面顶部栏（el-header）：高度 52px，用 flex 布局使内容垂直居中
         border-bottom 在底部加一条分隔线，把标题栏和内容区分开
       -->
-      <el-header style="display:flex;align-items:center;border-bottom:1px solid var(--border-color);background:#ffffff" height="52px">
+      <el-header style="display:flex;align-items:center;border-bottom:1px solid var(--border-color);background:var(--surface-color)" height="52px">
         <!--
           标题文字：显示当前页面名称（Dashboard / Tasks / Settings 等）
           {{ pageTitle }} 是双花括号插值语法，把 JavaScript 变量的值显示在这里
@@ -232,18 +232,31 @@ const isLoginPage = computed(() => route.path === '/login')
     > Microsoft YaHei（微软雅黑）> Arial（通用英文字体）> sans-serif（系统默认无衬线字体）
 */
 :root {
-  --bg-color: #F8FAFC;
-  --surface-color: #FFFFFF;
+  --bg-color: #0F172A;
+  --surface-color: #1E293B;
   --primary-color: #3B82F6;
   --secondary-color: #60A5FA;
   --cta-color: #F97316;
-  --text-main: #1E293B;
-  --text-secondary: #475569;
-  --border-color: #E2E8F0;
+  --text-main: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --border-color: #334155;
   --success-color: #10B981;
   --error-color: #EF4444;
   --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
   --font-sans: 'Fira Sans', 'Helvetica Neue', Helvetica, sans-serif;
+  
+  /* Element Plus Variables Override for Dark Mode */
+  --el-bg-color: var(--bg-color);
+  --el-bg-color-overlay: var(--surface-color);
+  --el-bg-color-page: var(--bg-color);
+  --el-text-color-primary: var(--text-main);
+  --el-text-color-regular: var(--text-secondary);
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--border-color);
+  --el-border-color-lighter: var(--border-color);
+  --el-fill-color-blank: var(--surface-color);
+  --el-fill-color: var(--border-color);
+  --el-fill-color-light: #334155;
 }
 
 body {
@@ -276,10 +289,13 @@ body {
 
 .el-table {
   --el-table-border-color: var(--border-color) !important;
-  --el-table-header-bg-color: #F1F5F9 !important;
+  --el-table-header-bg-color: var(--surface-color) !important;
   --el-table-header-text-color: var(--text-main) !important;
   --el-table-text-color: var(--text-main) !important;
-  --el-table-row-hover-bg-color: #EFF6FF !important;
+  --el-table-row-hover-bg-color: #334155 !important;
+  --el-table-bg-color: var(--surface-color) !important;
+  --el-table-tr-bg-color: var(--surface-color) !important;
+  background-color: var(--surface-color) !important;
   border-radius: 6px;
   overflow: hidden;
 }
