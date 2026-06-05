@@ -51,6 +51,25 @@ else
     green "[OK] 服务已启动"
 fi
 
+# 4. 检测并安全合并新增的配置项
+CONFIG_FILE="$APP_DIR/config.yaml"
+if [ -f "$CONFIG_FILE" ]; then
+    # 检查是否已有 Nice 优先级及日志限额等新字段，没有则追加
+    if ! grep -q "nice_value" "$CONFIG_FILE"; then
+        echo "[INFO] 检测到旧版本配置文件缺失安全限额参数，正在自动注入 Linux 资源限制配置..."
+        cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+        sed -i '/pool_size:/a\    cpu_quota: 50\n    enable_cgroups: false\n    nice_value: 19\n    ionice_class: 3' "$CONFIG_FILE"
+        green "[OK] 已自动将 nice_value/cpu_quota 资源隔离配置合并至 config.yaml"
+    fi
+    if ! grep -q "max_logs_per_task" "$CONFIG_FILE"; then
+        echo "[INFO] 检测到旧版本配置文件缺失日志配额参数，正在自动注入日志熔断与配额配置..."
+        sed -i '/max_records:/a\    max_logs_per_task: 1000\n    task_log_dir: ./data/logs\n    file_max_size_mb: 50\n    file_max_backups: 5\n    file_max_age_days: 30\n    min_free_disk_space_percent: 10\n    min_free_disk_space_gb: 10' "$CONFIG_FILE"
+        green "[OK] 已自动将 max_logs_per_task 磁盘/数据库限额配置合并至 config.yaml"
+    fi
+    # 触发服务重启以加载合并后的配置
+    systemctl restart "$SERVICE_NAME"
+fi
+
 echo ""
 echo "============================================"
 echo " 升级完成！"

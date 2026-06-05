@@ -96,10 +96,20 @@ executor:
   pool_size: 32
   output_truncate_kb: 64
   memory_limit_mb: 512
+  cpu_quota: 50           # Max CPU usage quota (%)
+  enable_cgroups: false   # Enable cgroups isolation limit
+  nice_value: 19          # Nice value (CPU scheduling priority, 19 is lowest)
+  ionice_class: 3         # I/O scheduling class (3 is Idle)
 
 log:
   retention_days: 30
   max_records: 100000
+  max_logs_per_task: 1000 # Max DB logs per task (prevent log pollution)
+  file_max_size_mb: 50    # Max disk task log size
+  file_max_backups: 5     # Max disk log backups
+  file_max_age_days: 30   # Max days to keep disk logs
+  min_free_disk_space_percent: 10 # Min free disk space percentage (safety valve)
+  min_free_disk_space_gb: 10      # Min free disk space GB
 
 circuit_breaker:
   failure_threshold: 5
@@ -246,3 +256,7 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o cronix-linux 
 - [x] Circuit breaker for HTTP tasks
 - [x] Execution log cleanup (retention + max records)
 - [x] DAG cycle detection with rollback
+- [x] Linux CPU/IO scheduling prioritization (nice/ionice) & cgroups limits fallback
+- [x] Streaming disk logging with rotation & gzip compression & expiration
+- [x] Disk space safety valve protection
+- [x] Task-level database log quota isolation

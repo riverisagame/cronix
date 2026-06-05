@@ -5,19 +5,20 @@
 package scheduler
 
 import (
-    "context"      // 上下文：控制goroutine的生命周期
-    "fmt"          // 格式化输出：拼接错误信息
-    "runtime"      // 运行时信息：获取CPU核心数
-    "sync"         // 并发控制：WaitGroup等待一组任务完成
-    "time"         // 时间处理：定时器、时间计算
+	"context"      // 上下文：控制goroutine的生命周期
+	"fmt"          // 格式化输出：拼接错误信息
+	"runtime"      // 运行时信息：获取CPU核心数
+	"sync"         // 并发控制：WaitGroup等待一组任务完成
+	"sync/atomic"  // 原子操作：用于日志写入计数器
+	"time"         // 时间处理：定时器、时间计算
 
-    "cronix/internal/config"   // 配置模块
-    "cronix/internal/executor"  // 执行模块：实际执行shell、HTTP、清理等任务
-    "cronix/internal/model"     // 数据模型
+	"cronix/internal/config"   // 配置模块
+	"cronix/internal/executor"  // 执行模块：实际执行shell、HTTP、清理等任务
+	"cronix/internal/model"     // 数据模型
 
-    "github.com/panjf2000/ants/v2"   // ants：高性能的goroutine池（线程池）
-    "github.com/rs/zerolog/log"      // zerolog：结构化日志库
-    "gorm.io/gorm"                   // GORM：数据库操作
+	"github.com/panjf2000/ants/v2"   // ants：高性能的goroutine池（线程池）
+	"github.com/rs/zerolog/log"      // zerolog：结构化日志库
+	"gorm.io/gorm"                   // GORM：数据库操作
 )
 
 // StatsCacheInvalidator defines the interface to invalidate dashboard statistics cache.
@@ -35,6 +36,7 @@ type Executor struct {
 	cfg              *config.Config         // 系统配置：线程池大小、输出截断大小等
 	engine           *Engine                // 调度引擎：从这里接收"该执行任务了"的信号
 	CacheInvalidator StatsCacheInvalidator // 缓存失效接口
+	logWriteCounter  uint64                 // 原子计数器：控制全局日志主动清理的时机
 }
 
 // NewExecutor 创建任务执行器
@@ -344,7 +346,7 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog, 
     switch task.TaskType {                                       // 根据不同任务类型，走不同分支
     case "shell":
         // Shell任务：在操作系统命令行中执行一条命令
-        result := executor.ExecuteShell(ctx, task.Command, task.WorkDir, timeoutSec, task.RunAs)
+        result := executor.ExecuteShell(ctx, task.Command, task.WorkDir, timeoutSec, task.RunAs, task.ID)
         if result.Error != nil {
             execLog.Status = "failed"
             execLog.ErrorMsg = result.Error.Error()
@@ -406,6 +408,18 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog, 
     }
 
     e.db.Save(execLog)                                           // 把执行结果保存到数据库
+    
+    // 执行单任务数据库日志限额清理
+    if execLog.TaskID != nil && e.cfg.Log.MaxLogsPerTask > 0 {
+        e.limitTaskLogs(*execLog.TaskID, e.cfg.Log.MaxLogsPerTask)
+    }
+
+    // 原子计数器递增，每 500 次写入异步触发一次全局日志清理
+    atomic.AddUint64(&e.logWriteCounter, 1)
+    if atomic.LoadUint64(&e.logWriteCounter)%500 == 0 {
+        go e.cleanupOldLogs()
+    }
+
     if e.CacheInvalidator != nil {
         e.CacheInvalidator.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
     }
@@ -516,5 +530,38 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
 	e.db.Save(&glog)
 	if e.CacheInvalidator != nil {
 		e.CacheInvalidator.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+	}
+}
+
+// limitTaskLogs 清理单个任务的超额日志记录，防止数据库爆满和“劣币驱逐良币”
+func (e *Executor) limitTaskLogs(taskID uint, maxLogs int) {
+	var count int64
+	e.db.Model(&model.ExecutionLog{}).Where("task_id = ?", taskID).Count(&count)
+	if count <= int64(maxLogs) {
+		return
+	}
+	excess := count - int64(maxLogs)
+
+	// 为了兼容 SQLite / MySQL 等不同数据库，不能直接在 DELETE 中使用 LIMIT。
+	// 我们先查询出最旧的 excess 个 id，然后再批量删除它们。
+	var ids []uint
+	err := e.db.Model(&model.ExecutionLog{}).
+		Select("id").
+		Where("task_id = ?", taskID).
+		Order("id ASC").
+		Limit(int(excess)).
+		Pluck("id", &ids).Error
+	if err != nil {
+		log.Warn().Err(err).Uint("task_id", taskID).Msg("failed to query oldest log ids for limitTaskLogs")
+		return
+	}
+
+	if len(ids) > 0 {
+		result := e.db.Where("id IN (?)", ids).Delete(&model.ExecutionLog{})
+		if result.Error != nil {
+			log.Warn().Err(result.Error).Uint("task_id", taskID).Msg("failed to prune oldest log ids in limitTaskLogs")
+		} else {
+			log.Debug().Int64("deleted", result.RowsAffected).Uint("task_id", taskID).Msg("limitTaskLogs pruned excess logs")
+		}
 	}
 }

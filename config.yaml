@@ -1,6 +1,6 @@
 auth:
     jwt_secret: f346aa8c45b6a233089ba0201a2d5b2b50ce1481fb1b9808de2bc0774e938f55
-    password: "$2a$10$8PaE6vFfCbmz4vEw12TehetPc9qZpfb0k5.dPR4hBnf9kEugdwStO"
+    password: "$2a$10$roXATU6cz0kjOm7Kex/g9emnhUvHkahYncOfFC3rDeExmNvEqECB."
     username: admin
 circuit_breaker:
     cooldown_seconds: 60
@@ -15,6 +15,10 @@ executor:
     memory_limit_mb: 512
     output_truncate_kb: 64
     pool_size: 32
+    cpu_quota: 50                   # 单任务的最大 CPU 使用率限额（百分比，如 50 代表 50%）
+    enable_cgroups: false           # 是否对任务子进程启用 cgroups 资源限额隔离
+    nice_value: 19                  # Nice 调度优先级（-20 到 19，19最低，默认19）
+    ionice_class: 3                 # I/O 调度级别（0-3，3表示 Idle 调度，默认3）
 log:
     file: ./data/cronix.log
     level: info
@@ -23,6 +27,13 @@ log:
     max_records: 100000
     max_size_mb: 100
     retention_days: 30
+    max_logs_per_task: 1000         # 每个任务在数据库中最多保留的执行记录条数（防数据库膨胀）
+    task_log_dir: ./data/logs       # 任务磁盘日志文件的存放目录
+    file_max_size_mb: 50            # 单个磁盘日志文件的最大大小限制（MB）
+    file_max_backups: 5             # 单个磁盘日志文件的最大备份个数限制
+    file_max_age_days: 30           # 磁盘备份日志文件的最长保留天数
+    min_free_disk_space_percent: 10 # 最小空闲磁盘空间百分比限制，低于该值则熔断磁盘日志写入
+    min_free_disk_space_gb: 10      # 最小空闲磁盘空间绝对大小（GB），低于该值则熔断磁盘日志写入
 notify:
     retry: 3
     retry_interval: 5s

@@ -193,6 +193,18 @@ type ExecutorConfig struct {
     // MaxTimeoutSec 全局任务超时上限（秒），用户设置值不能超过此值
     // 默认 3600 秒（1小时），设为 0 则不限
     MaxTimeoutSec int `mapstructure:"max_timeout_sec"`
+
+    // CPUQuota 任务的 CPU 使用率配额上限（百分比，如 50 代表 50%）
+    CPUQuota int `mapstructure:"cpu_quota"`
+
+    // EnableCGroups 是否对子进程启用 CGroups 隔离限制
+    EnableCGroups bool `mapstructure:"enable_cgroups"`
+
+    // NiceValue CPU 调度 Nice 值优先级（-20 到 19，值越大优先级越低，默认 19）
+    NiceValue int `mapstructure:"nice_value"`
+
+    // IONiceClass I/O 调度级别类别（0-3，默认 3 即 Idle）
+    IONiceClass int `mapstructure:"ionice_class"`
 }
 
 // ============================================================
@@ -222,6 +234,27 @@ type LogConfig struct {
 
     // MaxRecords 最多保留多少条执行日志记录（防数据库膨胀）
     MaxRecords int `mapstructure:"max_records"`
+
+    // MaxLogsPerTask 每个任务在数据库中最多保留的日志记录数
+    MaxLogsPerTask int `mapstructure:"max_logs_per_task"`
+
+    // TaskLogDir 任务磁盘日志文件的存放目录
+    TaskLogDir string `mapstructure:"task_log_dir"`
+
+    // FileMaxSizeMB 单个磁盘日志文件的最大大小限制（MB，默认 50MB）
+    FileMaxSizeMB int `mapstructure:"file_max_size_mb"`
+
+    // FileMaxBackups 单个磁盘日志文件的最大备份个数限制
+    FileMaxBackups int `mapstructure:"file_max_backups"`
+
+    // FileMaxAgeDays 单个磁盘日志文件的最大保留天数
+    FileMaxAgeDays int `mapstructure:"file_max_age_days"`
+
+    // MinFreeDiskSpacePercent 最小空闲磁盘空间百分比限制，低于该值则熔断日志写入
+    MinFreeDiskSpacePercent int `mapstructure:"min_free_disk_space_percent"`
+
+    // MinFreeDiskSpaceGB 最小空闲磁盘空间绝对大小（GB）
+    MinFreeDiskSpaceGB int `mapstructure:"min_free_disk_space_gb"`
 }
 
 // ============================================================
@@ -364,6 +397,33 @@ func Load(configPath string) (*Config, error) {
     if cfg.Log.MaxRecords <= 0 {
         cfg.Log.MaxRecords = 100000
     }
+    if cfg.Executor.NiceValue < -20 || cfg.Executor.NiceValue > 19 {
+        cfg.Executor.NiceValue = 19
+    }
+    if cfg.Executor.IONiceClass < 0 || cfg.Executor.IONiceClass > 3 {
+        cfg.Executor.IONiceClass = 3
+    }
+    if cfg.Log.MaxLogsPerTask <= 0 {
+        cfg.Log.MaxLogsPerTask = 1000
+    }
+    if cfg.Log.TaskLogDir == "" {
+        cfg.Log.TaskLogDir = "./data/logs"
+    }
+    if cfg.Log.FileMaxSizeMB <= 0 {
+        cfg.Log.FileMaxSizeMB = 50
+    }
+    if cfg.Log.FileMaxBackups <= 0 {
+        cfg.Log.FileMaxBackups = 5
+    }
+    if cfg.Log.FileMaxAgeDays <= 0 {
+        cfg.Log.FileMaxAgeDays = 30
+    }
+    if cfg.Log.MinFreeDiskSpacePercent <= 0 {
+        cfg.Log.MinFreeDiskSpacePercent = 10
+    }
+    if cfg.Log.MinFreeDiskSpaceGB <= 0 {
+        cfg.Log.MinFreeDiskSpaceGB = 10
+    }
     if cfg.CircuitBreaker.FailureThreshold <= 0 {
         cfg.CircuitBreaker.FailureThreshold = 5
     }
@@ -457,6 +517,12 @@ func (c *Config) Validate() error {
     // 熔断阈值至少 1 次（不能为 0）
     if c.CircuitBreaker.FailureThreshold < 1 {
         return fmt.Errorf("熔断器失败阈值不合法: %d", c.CircuitBreaker.FailureThreshold)
+    }
+    if c.Executor.NiceValue < -20 || c.Executor.NiceValue > 19 {
+        return fmt.Errorf("NiceValue值不合法: %d（必须在 -20 到 19 之间）", c.Executor.NiceValue)
+    }
+    if c.Executor.IONiceClass < 0 || c.Executor.IONiceClass > 3 {
+        return fmt.Errorf("IONiceClass不合法: %d（必须在 0 到 3 之间）", c.Executor.IONiceClass)
     }
     return nil // 全部通过检查
 }

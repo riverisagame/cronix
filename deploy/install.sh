@@ -130,6 +130,10 @@ executor:
   output_truncate_kb: 64         # 任务输出最大保留大小（KB），超出部分截断
   memory_limit_mb: 512           # 内存使用上限（MB）
   max_timeout_sec: 3600          # 全局任务超时上限（秒），用户设置不能超过此值
+  cpu_quota: 50                  # 单任务的最大 CPU 使用率限额（百分比）
+  enable_cgroups: false          # 是否对任务启用 cgroups 隔离限制
+  nice_value: 19                 # Nice 调度优先级（-20 到 19，19最低，默认19）
+  ionice_class: 3                # I/O 调度级别（0-3，3表示 Idle，默认3）
 
 # --- 日志配置 ---
 log:
@@ -140,6 +144,13 @@ log:
   max_age_days: 30               # 日志文件最长保留天数
   retention_days: 30             # 数据库中执行记录保留天数
   max_records: 100000            # 数据库中执行记录最大条数
+  max_logs_per_task: 1000        # 每个任务在数据库中最多保留的执行记录数（防数据库膨胀）
+  task_log_dir: ./data/logs      # 任务磁盘日志文件的存放目录
+  file_max_size_mb: 50           # 单个磁盘日志文件的最大大小限制（MB）
+  file_max_backups: 5            # 单个磁盘日志文件的最大备份个数限制
+  file_max_age_days: 30          # 磁盘日志备份的最大保留天数
+  min_free_disk_space_percent: 10 # 最小空闲磁盘空间百分比限制，低于该值则熔断日志写入
+  min_free_disk_space_gb: 10     # 最小空闲磁盘空间绝对大小（GB），低于该值则熔断日志写入
 
 # --- 通知配置 ---
 notify:
