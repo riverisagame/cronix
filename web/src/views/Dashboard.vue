@@ -218,6 +218,31 @@
         </el-card>
       </el-col>
     </el-row>
+
+	<!-- 第三行：性能指标图表 -->
+	<!-- @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05 -->
+	<el-row :gutter="20" style="margin-top:20px">
+	  <el-col :span="12">
+		<el-card shadow="hover" class="glass-card">
+		  <template #header>
+			<span style="font-weight:600">Throughput (Tasks/min)</span>
+		  </template>
+		  <div style="height:300px">
+			<v-chart class="chart" :option="throughputOption" autoresize />
+		  </div>
+		</el-card>
+	  </el-col>
+	  <el-col :span="12">
+		<el-card shadow="hover" class="glass-card">
+		  <template #header>
+			<span style="font-weight:600">Latency (P95 / P99 ms)</span>
+		  </template>
+		  <div style="height:300px">
+			<v-chart class="chart" :option="latencyOption" autoresize />
+		  </div>
+		</el-card>
+	  </el-col>
+	</el-row>
   </div>
 </template>
 
@@ -228,13 +253,35 @@
  *   - computed：创建"计算属性"（根据其他数据自动算出新值）
  *   - onMounted：在组件"挂载"到页面后执行回调函数（即页面加载完成后自动运行）
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 // 导入仪表盘和日志的 API 函数
 import { dashboardAPI, logAPI } from '../api/index'
 
 // 导入仪表盘页面需要用到的 4 个图标组件
 import { Grid, CircleCheck, Timer, WarningFilled } from '@element-plus/icons-vue'
+
+// 导入 ECharts
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart, BarChart } from 'echarts/charts'
+import {
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent
+} from 'echarts/components'
+import VChart from 'vue-echarts'
+
+use([
+  CanvasRenderer,
+  LineChart,
+  BarChart,
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent
+])
 
 /**
  * stats 是一个响应式变量，存储仪表盘的统计数据。
@@ -313,5 +360,59 @@ onMounted(async () => {
    * 把 items 数组赋值给 recentLogs，如果没有返回空数组 []
    */
   try { const l = await logAPI.list({ page: 1, page_size: 8 }); recentLogs.value = l.data.data.items || [] } catch(e) {}
+
+  await refreshMetrics()
+  // 每隔15秒刷新一次指标
+  metricsTimer = setInterval(refreshMetrics, 15000)
 })
+
+let metricsTimer: any = null
+onUnmounted(() => {
+  if (metricsTimer) clearInterval(metricsTimer)
+})
+
+const throughputOption = ref<any>({})
+const latencyOption = ref<any>({})
+
+const refreshMetrics = async () => {
+  try {
+    const res = await dashboardAPI.metrics()
+    const data = res.data.data
+
+    // Throughput Chart (Bar Chart for Success vs Failed)
+    throughputOption.value = {
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { data: ['Success', 'Failed'], textStyle: { color: '#e5e7eb' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+      xAxis: { type: 'category', data: data.minute_labels, axisLabel: { color: '#909399' } },
+      yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#909399' } },
+      series: [
+        { name: 'Success', type: 'bar', stack: 'total', data: data.minute_success, itemStyle: { color: 'var(--cyber-green)' } },
+        { name: 'Failed', type: 'bar', stack: 'total', data: data.minute_failed, itemStyle: { color: 'var(--cyber-red)' } }
+      ]
+    }
+
+    // Latency Chart (Line Chart for P95 and P99)
+    latencyOption.value = {
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['P95', 'P99'], textStyle: { color: '#e5e7eb' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+      xAxis: { type: 'category', boundaryGap: false, data: data.minute_labels, axisLabel: { color: '#909399' } },
+      yAxis: { type: 'value', name: 'ms', splitLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#909399' }, nameTextStyle: { color: '#909399' } },
+      series: [
+        { name: 'P95', type: 'line', smooth: true, data: data.minute_p95, itemStyle: { color: '#409EFF' }, areaStyle: { opacity: 0.1, color: '#409EFF' } },
+        { name: 'P99', type: 'line', smooth: true, data: data.minute_p99, itemStyle: { color: '#E6A23C' }, areaStyle: { opacity: 0.1, color: '#E6A23C' } }
+      ]
+    }
+  } catch (e) {
+    console.error('Failed to load metrics:', e)
+  }
+}
 </script>
+
+<style scoped>
+.chart {
+  width: 100%;
+  height: 100%;
+}
+</style>

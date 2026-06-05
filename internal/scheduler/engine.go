@@ -58,13 +58,15 @@ func (e *Engine) SetGroupTrigger(fn func(uint)) {
 // Start 启动定时调度器
 // 调用后，所有已注册的定时任务开始按照Cron表达式计时
 func (e *Engine) Start() {
-    e.cron.Start()
+	e.cron.Start()
+	GlobalMetricsRegistry.Start()
 }
 
 // Stop 优雅地停止定时调度器
 // 返回一个上下文对象，当所有正在运行的任务都完成后，这个上下文会结束
 func (e *Engine) Stop() context.Context {
-    return e.cron.Stop() // Stop会等待所有正在执行的任务完成
+	GlobalMetricsRegistry.Stop()
+	return e.cron.Stop() // Stop会等待所有正在执行的任务完成
 }
 
 // ReloadAll 从数据库重新加载所有"已启用"的任务到定时器中

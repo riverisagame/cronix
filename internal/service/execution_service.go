@@ -7,8 +7,9 @@ package service
 import (
     "sync"                        // 并发安全的读写锁
     "time"                        // 时间处理：计算截止日期 / TTL 过期
-    "cronix/internal/model"       // 数据模型
-    "gorm.io/gorm"                // GORM数据库操作
+	"cronix/internal/model"       // 数据模型
+	"cronix/internal/scheduler"
+	"gorm.io/gorm"                // GORM数据库操作
 )
 
 type statsCache struct {
@@ -181,16 +182,22 @@ func (s *ExecutionService) GetDashboardStats() (map[string]interface{}, error) {
     var todayFailed int64
     s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ? AND status = ?", today, "failed").Count(&todayFailed)
 
-    stats := map[string]interface{}{
-        "total_tasks":   totalTasks,
-        "enabled_tasks": enabledTasks,
-        "today_total":   todayTotal,
-        "today_success": todaySuccess,
-        "today_failed":  todayFailed,
-    }
-    s.cache.data = stats
-    s.cache.expireAt = time.Now().Add(60 * time.Second)
-    return stats, nil
+	stats := map[string]interface{}{
+		"total_tasks":   totalTasks,
+		"enabled_tasks": enabledTasks,
+		"today_total":   todayTotal,
+		"today_success": todaySuccess,
+		"today_failed":  todayFailed,
+	}
+	s.cache.data = stats
+	s.cache.expireAt = time.Now().Add(60 * time.Second)
+	return stats, nil
+}
+
+// GetDashboardMetrics 获取系统级运行指标（P95、P99、QPS等）
+// @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05
+func (s *ExecutionService) GetDashboardMetrics() scheduler.MetricSnapshot {
+	return scheduler.GlobalMetricsRegistry.GetSnapshot()
 }
 
 // buildTaskGroupNameMap returns a map from task ID to group name for all tasks in groups.

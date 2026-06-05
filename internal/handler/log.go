@@ -150,13 +150,20 @@ func (h *LogHandler) DeleteLog(c *gin.Context) {
 
 // GetLog returns a single execution log with full output.
 func (h *LogHandler) GetLog(c *gin.Context) {
-    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-    log, err := h.ExecSvc.GetLog(uint(id))
-    if err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "log not found"})
-        return
-    }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": log})
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	log, err := h.ExecSvc.GetLog(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "log not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": log})
+}
+
+// GetDashboardMetrics 返回系统的运行指标
+// @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05
+func (h *LogHandler) GetDashboardMetrics(c *gin.Context) {
+	metrics := h.ExecSvc.GetDashboardMetrics()
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": metrics})
 }
 
 // ClearGroupLogs deletes all execution logs for a group.

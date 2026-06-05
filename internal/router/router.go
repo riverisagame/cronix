@@ -81,11 +81,12 @@ func SetupRouter(
         api.DELETE("/logs/:id", logH.DeleteLog)               // 删除单条日志
         api.GET("/logs/export", logH.ExportLogs)                  // 导出日志CSV/JSON
         api.GET("/logs/:id", logH.GetLog)                      // 获取单条日志详情（含完整output）
-        api.DELETE("/tasks/:id/logs", logH.ClearTaskLogs)     // 清空指定任务日志
-        api.DELETE("/groups/:id/logs", logH.ClearGroupLogs)  // 清空组日志
-        api.GET("/dashboard/stats", logH.GetDashboardStats)    // 仪表盘统计数据
-        api.GET("/settings", logH.GetSettings)                 // 读取系统设置
-        api.PUT("/settings", logH.UpdateSettings)              // 修改系统设置
+		api.DELETE("/tasks/:id/logs", logH.ClearTaskLogs)     // 清空指定任务日志
+		api.DELETE("/groups/:id/logs", logH.ClearGroupLogs)  // 清空组日志
+		api.GET("/dashboard/stats", logH.GetDashboardStats)    // 仪表盘统计数据
+		api.GET("/dashboard/metrics", logH.GetDashboardMetrics) // 仪表盘性能指标
+		api.GET("/settings", logH.GetSettings)                 // 读取系统设置
+		api.PUT("/settings", logH.UpdateSettings)              // 修改系统设置
 
         // ---- 任务组管理 ----
         api.GET("/groups", groupH.ListGroups)                  // 获取组列表

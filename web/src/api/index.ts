@@ -124,11 +124,18 @@ export const logAPI = {
  * dashboardAPI：仪表盘（首页统计面板）相关的 API 调用函数。
  */
 export const dashboardAPI = {
-  /**
-   * 获取仪表盘的统计数据（任务总数、成功率、今日运行次数等）。
-   * 请求 GET /dashboard/stats
-   */
-  stats() { return api.get('/dashboard/stats') }
+	/**
+	 * 获取仪表盘的统计数据（任务总数、成功率、今日运行次数等）。
+	 * 请求 GET /dashboard/stats
+	 */
+	stats() { return api.get('/dashboard/stats') },
+
+	/**
+	 * 获取系统运行的性能指标（P95、P99、QPS等）。
+	 * 请求 GET /dashboard/metrics
+	 * @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05
+	 */
+	metrics() { return api.get('/dashboard/metrics') }
 }
 
 /**

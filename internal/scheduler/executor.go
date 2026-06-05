@@ -379,9 +379,7 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog, 
 // runTaskByTypeCtx 带上下文版本的任务执行分发，可以通过 ctx 取消来即时强杀子进程
 // @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
 func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execLog *model.ExecutionLog, timeoutSec int) {
-    now := time.Now()
-    execLog.EndTime = &now                                       // 记录结束时间
-    truncateKB := e.cfg.Executor.OutputTruncateKB                // 输出截断大小（KB）
+	truncateKB := e.cfg.Executor.OutputTruncateKB                // 输出截断大小（KB）
 
     switch task.TaskType {                                       // 根据不同任务类型，走不同分支
     case "shell":
@@ -441,13 +439,20 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
         execLog.ExitCode = &code
         execLog.Output = fmt.Sprintf("Status: %d", result.StatusCode) // 输出HTTP状态码
 
-    default:
-        // 未知的任务类型，标记为失败
-        execLog.Status = "failed"
-        execLog.ErrorMsg = fmt.Sprintf("unknown task type: %s", task.TaskType)
-    }
+	default:
+		// 未知的任务类型，标记为失败
+		execLog.Status = "failed"
+		execLog.ErrorMsg = fmt.Sprintf("unknown task type: %s", task.TaskType)
+	}
 
-    e.db.Save(execLog)                                           // 把执行结果保存到数据库
+	now := time.Now()
+	execLog.EndTime = &now                                       // 记录结束时间
+
+	// @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05
+	duration := now.Sub(execLog.StartTime).Milliseconds()
+	GlobalMetricsRegistry.RecordExecution(duration, execLog.Status == "success")
+
+	e.db.Save(execLog)                                           // 把执行结果保存到数据库
     
     // 执行单任务数据库日志限额清理
     if execLog.TaskID != nil && e.cfg.Log.MaxLogsPerTask > 0 {
