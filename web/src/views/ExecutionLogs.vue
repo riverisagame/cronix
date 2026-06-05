@@ -13,7 +13,7 @@
     </h2>
 
     <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-    <el-card shadow="hover" class="glass-card" v-loading="loading">
+    <el-card shadow="hover" class="data-card" v-loading="loading">
       <el-row :gutter="16" style="margin-bottom:16px">
         <el-col :span="6">
           <el-input v-model="filters.task_name" placeholder="Task name..." clearable @keyup.enter="load">
@@ -61,8 +61,8 @@
       </div>
     </el-card>
 
-    <el-drawer v-model="drawerVisible" title="Execution Detail" size="66%" direction="rtl">
-      <div v-if="detailLoading" style="text-align:center;padding:40px;color:#909399" v-loading="true">Loading...</div>
+    <el-drawer v-model="drawerVisible" title="Execution Detail" size="80%" direction="rtl">
+      <div v-if="detailLoading" style="text-align:center;padding:40px;color:var(--text-secondary)" v-loading="true">Loading...</div>
       <template v-else-if="detail">
         <div style="display:flex;gap:10px;margin-bottom:16px">
           <el-tag :type="detail.status==='success'?'success':'danger'">{{ detail.status?.toUpperCase() }}</el-tag>
@@ -78,7 +78,7 @@
 
         <div v-if="detail.output" style="margin-bottom:16px">
           <div style="font-weight:bold;margin-bottom:8px;color:#67C23A">Output</div>
-          <pre style="background:#f5f7fa;color:#303133;padding:14px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:0">{{ outputDisplay }}</pre>
+          <pre style="background:#f5f7fa;color:#303133;padding:14px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow:auto;margin:0">{{ outputDisplay }}</pre>
           <el-button v-if="outputTruncated" size="small" text @click="showFullOutput = !showFullOutput" style="margin-top:4px">
             {{ showFullOutput ? 'Collapse' : 'Show all (' + outputLineCount + ' lines)' }}
           </el-button>
@@ -86,7 +86,7 @@
 
         <div v-if="detail.error_msg">
           <div style="font-weight:bold;margin-bottom:8px;color:#F56C6C">Error</div>
-          <pre style="background:#fef0f0;color:#F56C6C;padding:14px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:0">{{ detail.error_msg }}</pre>
+          <pre style="background:#fef0f0;color:#F56C6C;padding:14px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;margin:0">{{ detail.error_msg }}</pre>
         </div>
       </template>
     </el-drawer>
@@ -134,7 +134,7 @@ const columns: Column<any>[] = [
   /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
   {
     key: 'id', title: 'ID', width: 80, dataKey: 'id',
-    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad' }, cellData)
+    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--font-mono);font-size:12px;color:var(--text-main)' }, cellData)
   },
   { key: 'task_name', title: 'Task', width: 160, flexGrow: 1, dataKey: 'task_name' },
   { key: 'group_name', title: 'Group', width: 130, flexGrow: 1, dataKey: 'group_name' },
@@ -149,11 +149,11 @@ const columns: Column<any>[] = [
   { key: 'trigger_type', title: 'Trigger', width: 90, dataKey: 'trigger_type' },
   {
     key: 'start_time', title: 'Time', width: 180, flexGrow: 1, dataKey: 'start_time',
-    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#8a8d98' }, formatTime(cellData))
+    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--font-mono);font-size:12px;color:var(--text-secondary)' }, formatTime(cellData))
   },
   {
     key: 'exit_code', title: 'Exit', width: 60, dataKey: 'exit_code',
-    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad' }, cellData !== null ? String(cellData) : '-')
+    cellRenderer: ({ cellData }: any) => h('span', { style: 'font-family:var(--font-mono);font-size:12px;color:var(--text-main)' }, cellData !== null ? String(cellData) : '-')
   },
   {
     key: 'error_msg', title: 'Preview', width: 300, flexGrow: 4, dataKey: 'error_msg',
@@ -162,13 +162,13 @@ const columns: Column<any>[] = [
       const errMsg = cellData || ''
       if (output) {
         const text = output.length > 80 ? output.substring(0, 80) + '...' : output
-        return h('code', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad' }, text)
+        return h('code', { style: 'font-family:var(--font-mono);font-size:12px;color:var(--text-main)' }, text)
       }
       if (errMsg) {
         const text = errMsg.length > 80 ? errMsg.substring(0, 80) + '...' : errMsg
-        return h('code', { style: 'font-family:var(--cyber-font-mono);font-size:12px;color:var(--cyber-red)' }, text)
+        return h('code', { style: 'font-family:var(--font-mono);font-size:12px;color:var(--error-color)' }, text)
       }
-      return h('span', { style: 'color:#5c5e66' }, '-')
+      return h('span', { style: 'color:var(--text-secondary)' }, '-')
     }
   },
 ]

@@ -28,15 +28,12 @@
       <h2 style="margin:0 0 0 10px">{{ isNew ? 'Create Task' : 'Edit Task' }}</h2>
     </div>
 
-    <el-card shadow="hover" class="glass-card">
+    <el-card shadow="hover" class="data-card">
       <!--
         el-form：表单组件
         :model="form" 把表单数据绑定到 form 响应式对象上
-        label-width="140px" 所有标签宽度统一 140 像素（对齐美观）
-        style="max-width:1100px" 表单最大宽度 800 像素（太宽了不好看）
-      -->
-      <el-form :model="form" label-width="140px" style="max-width:800px">
-        <!--
+        label-width="160px" 标签宽度
+      <el-form :model="form" label-width="160px" style="max-width:100%">
           el-divider：分割线组件
           content-position="left" 文字靠左显示
         -->
@@ -67,7 +64,7 @@
         <!-- 常驻任务特有字段：Max Restart Attempts -->
         <el-form-item label="Max Retries" v-if="form.run_mode === 'daemon'">
           <el-input-number v-model="form.max_restart_attempts" :min="0" :max="100" />
-          <span style="margin-left:10px;font-size:12px;color:#909399">0 means unlimited</span>
+          <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 means unlimited</span>
         </el-form-item>
 
         <!--
@@ -83,7 +80,7 @@
           <div style="margin-top:10px;display:flex;gap:4px;flex-wrap:wrap">
             <span v-for="m in cronMacros" :key="m.label"
               class="macro-tag"
-              style="cursor:pointer;font-size:12px;padding:2px 8px;border:1px solid #555;border-radius:4px;color:#c0c4cc"
+              style="cursor:pointer;font-size:12px;padding:2px 8px;border:1px solid var(--border-color);border-radius:4px;color:var(--text-secondary)"
               @click="applyMacro(m.value)" :title="m.label + ': ' + m.value">
               {{ m.label }}
             </span>
@@ -99,11 +96,11 @@
             {{ cronHint }}
           </div>
           <!-- 下次执行 -->
-          <div v-if="cronNextRuns.length > 0" style="margin-top:10px;font-size:12px;color:#909399">
+          <div v-if="cronNextRuns.length > 0" style="margin-top:10px;font-size:12px;color:var(--text-secondary)">
             Next:
             <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">
               <span v-for="(t, i) in cronNextRuns" :key="i"
-                style="background:#1d1e1f;padding:2px 8px;border-radius:3px;white-space:nowrap">{{ t }}</span>
+                style="background:var(--bg-color-page);padding:2px 8px;border-radius:3px;white-space:nowrap;color:var(--text-main)">{{ t }}</span>
             </div>
           </div>
         </el-form-item>
@@ -144,7 +141,7 @@
 
           <!-- 要执行的 Shell 命令（必填），多行文本框 -->
           <el-form-item label="Command" required>
-            <el-input v-model="form.command" type="textarea" rows="3" placeholder="echo hello" data-testid="task-form-command" />
+            <el-input v-model="form.command" type="textarea" rows="25" placeholder="echo hello" data-testid="task-form-command" style="font-family: monospace; font-size: 14px; width: 100%;" />
           </el-form-item>
 
           <!-- 工作目录（命令在哪个文件夹下执行），非必填 -->
@@ -200,7 +197,7 @@
               注意：cleanup 的配置存在 form.command 字段里（复用字段）
               placeholder 显示一个 JSON 示例：清理 /tmp 目录下超过 72 小时的 .log 文件
             -->
-            <el-input v-model="form.command" type="textarea" rows="3" placeholder='{"path":"/tmp","pattern":"*.log","older_than_hours":72}' />
+            <el-input v-model="form.command" type="textarea" rows="10" placeholder='{"path":"/tmp","pattern":"*.log","older_than_hours":72}' style="font-family: monospace; font-size: 14px;" />
           </el-form-item>
         </template>
 
@@ -209,18 +206,30 @@
         -->
         <el-divider content-position="left">Advanced</el-divider>
         <!-- 用 el-row 把两个设置项并排显示 -->
-        <el-form-item label="Timeout(s)">
-            <el-input-number v-model="form.timeout_sec" :min="1" :max="3600" style="width:160px" />
-          </el-form-item>
-          <el-form-item label="Retry Count">
-            <el-input-number v-model="form.retry_count" :min="0" :max="10" style="width:160px" />
-          </el-form-item>
-          <el-form-item label="Retry Interval(s)">
-            <el-input-number v-model="form.retry_interval_sec" :min="0" :max="3600" style="width:160px" />
-          </el-form-item>
-          <el-form-item label="Max Concurrent">
-            <el-input-number v-model="form.max_concurrent" :min="1" :max="100" style="width:160px" />
-          </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="Timeout(s)">
+              <el-input-number v-model="form.timeout_sec" :min="1" :max="3600" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="Retry Count">
+              <el-input-number v-model="form.retry_count" :min="0" :max="10" style="width:100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="Retry Interval(s)">
+              <el-input-number v-model="form.retry_interval_sec" :min="0" :max="3600" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="Max Concurrent">
+              <el-input-number v-model="form.max_concurrent" :min="1" :max="100" style="width:100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <!-- 启用开关 -->
         <el-form-item label="Enabled">
@@ -233,7 +242,7 @@
           <el-select v-model="form.dep_ids" multiple placeholder="Select tasks this depends on..." style="width:100%">
             <el-option v-for="t in availableDepTasks" :key="t.id" :label="t.name + ' (#' + t.id + ')'" :value="t.id" />
           </el-select>
-          <div style="font-size:11px;color:#909399;margin-top:2px">所选任务必须先成功执行，此任务才会运行</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">所选任务必须先成功执行，此任务才会运行</div>
         </el-form-item>
 
         <!-- 操作按钮 -->
@@ -548,46 +557,15 @@ async function save() {
 </script>
 
 <style scoped>
-/* 磨砂玻璃卡片 */
-.glass-card {
-  background: rgba(20, 27, 45, 0.75) !important;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-}
 
-/* 分割线高级感 */
-:deep(.el-divider) {
-  border-top: 1px dashed rgba(255, 255, 255, 0.1) !important;
-  background: transparent !important;
-}
-:deep(.el-divider__text) {
-  background: #141b2d !important;
-  color: #10b981 !important;
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 1px;
-}
-
-/* 按钮微动效 */
-:deep(.el-button--primary) {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-  border: none !important;
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.2);
-  transition: all 0.3s ease;
-}
-:deep(.el-button--primary:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
-}
 
 /* 宏卡片高亮 */
 .macro-tag {
   transition: all 0.2s ease;
 }
 .macro-tag:hover {
-  border-color: #10b981 !important;
-  color: #10b981 !important;
-  background: rgba(16, 185, 129, 0.05) !important;
+  border-color: var(--primary-color) !important;
+  color: var(--primary-color) !important;
+  background: rgba(64, 158, 255, 0.05) !important;
 }
 </style>

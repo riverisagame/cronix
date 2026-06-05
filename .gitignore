@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # .gitignore - Git 忽略文件配置
 # 告诉 Git 哪些文件/文件夹不需要版本控制
 # ============================================================
@@ -45,3 +45,14 @@ prod-test.sh
 stress-test.sh
 test-suite.sh
 cronix
+internal/executor/data/
+internal/scheduler/data/
+internal/scheduler/*.gz
+node_modules/
+package-lock.json
+package.json
+run_e2e.sh
+cronix_test
+docs/sps/decisions/20260605_ui_ux_redesign_adr.md
+docs/sps/plans/20260605_ui_ux_light_theme_plan.md
+web/tests/e2e/specs/theme.spec.ts

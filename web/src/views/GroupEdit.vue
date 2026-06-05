@@ -6,7 +6,7 @@
     </div>
 
     <el-card shadow="hover" style="margin-bottom:20px">
-      <el-form :model="form" label-width="120px" style="max-width:1100px">
+      <el-form :model="form" label-width="140px" style="max-width:100%">
         <el-form-item label="Name" required>
           <el-input v-model="form.name" placeholder="e.g. daily-backup-pipeline" data-testid="group-form-name" />
         </el-form-item>
@@ -61,7 +61,7 @@
         <el-col :span="11">
           <h4 style="margin-top:0">Available Tasks</h4>
           <el-input v-model="taskSearch" placeholder="Search..." size="small" style="margin-bottom:8px" />
-          <div style="border:1px solid #333;border-radius:4px;min-height:200px;max-height:400px;overflow:auto;padding:8px">
+          <div style="border:1px solid var(--border-color, #dcdfe6);border-radius:4px;min-height:400px;max-height:600px;overflow:auto;padding:8px">
             <div v-for="t in availableTasks" :key="t.id"
               style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;margin-bottom:4px;background:#1d1e1f;border-radius:4px;cursor:pointer"
               @click="addMember(t)">
@@ -75,10 +75,10 @@
         <!-- Group members -->
         <el-col :span="11" :offset="2">
           <h4 style="margin-top:0">Group Members ({{ members.length }})</h4>
-          <div v-if="form.mode==='sequential'" style="font-size:12px;color:#909399;margin-bottom:8px">
+          <div v-if="form.mode==='sequential'" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
             Drag to reorder — tasks execute from top to bottom
           </div>
-          <div style="border:1px solid #409EFF;border-radius:4px;min-height:200px;max-height:400px;overflow:auto;padding:8px"
+          <div style="border:1px solid var(--primary-color, #409EFF);border-radius:4px;min-height:400px;max-height:600px;overflow:auto;padding:8px"
             @dragover.prevent>
             <TransitionGroup name="member-flip">
             <div v-for="(t, idx) in members" :key="t.id"

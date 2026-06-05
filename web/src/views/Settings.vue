@@ -19,7 +19,7 @@
       style="margin-bottom:20px" 和下一块之间留间距
     -->
     <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-    <el-card shadow="hover" class="glass-card" style="margin-bottom:20px">
+    <el-card shadow="hover" class="data-card" style="margin-bottom:20px">
       <!--
         #header 插槽自定义卡片标题
         加粗显示 "Executor"
@@ -41,7 +41,7 @@
             -->
             <el-input-number v-model="form.pool_size" :min="1" :max="256" />
             <!-- 说明文字：小号灰色字体 -->
-            <div style="font-size:12px;color:#909399;margin-top:4px">Number of goroutines for concurrent execution</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">Number of goroutines for concurrent execution</div>
           </el-form-item>
         </el-col>
 
@@ -53,7 +53,7 @@
               比如设为 64，表示每个任务最多保存 64KB 的输出内容，超出部分截断
             -->
             <el-input-number v-model="form.output_truncate_kb" :min="1" :max="1024" />
-            <div style="font-size:12px;color:#909399;margin-top:4px">Max output size captured per execution</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">Max output size captured per execution</div>
           </el-form-item>
         </el-col>
       </el-row>
@@ -63,7 +63,7 @@
       ======== 第二块：日志保留设置 ========
     -->
     <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-    <el-card shadow="hover" class="glass-card" style="margin-bottom:20px">
+    <el-card shadow="hover" class="data-card" style="margin-bottom:20px">
       <template #header><span style="font-weight:bold">Log Retention</span></template>
       <el-row :gutter="30">
         <!-- 左侧：保留天数 -->
@@ -74,7 +74,7 @@
               最少 1 天，最多 365 天（一年）
             -->
             <el-input-number v-model="form.retention_days" :min="1" :max="365" />
-            <div style="font-size:12px;color:#909399;margin-top:4px">Auto-delete execution logs older than this</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">Auto-delete execution logs older than this</div>
           </el-form-item>
         </el-col>
 
@@ -88,7 +88,7 @@
               :step="10000" 点击增减按钮时每次变化 10000
             -->
             <el-input-number v-model="form.max_records" :min="1000" :max="10000000" :step="10000" />
-            <div style="font-size:12px;color:#909399;margin-top:4px">Hard cap on execution log row count</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">Hard cap on execution log row count</div>
           </el-form-item>
         </el-col>
       </el-row>
@@ -106,7 +106,7 @@
         就像家里的电闸：短路时自动跳闸，过一会儿再试着合上。
     -->
     <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-    <el-card shadow="hover" class="glass-card">
+    <el-card shadow="hover" class="data-card">
       <template #header><span style="font-weight:bold">Circuit Breaker</span></template>
       <el-row :gutter="30">
         <!-- 左侧：失败阈值 -->
@@ -118,7 +118,7 @@
               比如设为 5：任务连续失败 5 次后，系统暂停执行它
             -->
             <el-input-number v-model="form.cb_threshold" :min="1" :max="100" />
-            <div style="font-size:12px;color:#909399;margin-top:4px">Consecutive failures before opening circuit</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">Consecutive failures before opening circuit</div>
           </el-form-item>
         </el-col>
 
@@ -131,7 +131,7 @@
               比如设为 60：任务被熔断后，等待 60 秒再尝试重新执行
             -->
             <el-input-number v-model="form.cb_cooldown" :min="1" :max="3600" />
-            <div style="font-size:12px;color:#909399;margin-top:4px">Wait time before attempting recovery</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">Wait time before attempting recovery</div>
           </el-form-item>
         </el-col>
       </el-row>

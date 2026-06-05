@@ -8,11 +8,11 @@
     </div>
 
     <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-    <el-card shadow="hover" class="glass-card">
+    <el-card shadow="hover" class="data-card">
       <el-table :data="groups" stripe v-loading="loading">
         <el-table-column label="ID" width="60">
           <template #default="{ row }">
-            <span style="font-family:var(--cyber-font-mono);font-size:12px;color:#a3a6ad">{{ row.id }}</span>
+            <span style="font-family:var(--font-mono);font-size:12px;color:var(--text-main)">{{ row.id }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="name" label="Name" min-width="150" />
@@ -26,8 +26,8 @@
         <el-table-column label="Cron" width="160">
           <template #default="{ row }">
             <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-            <el-tag v-if="row.cron_expr" size="small" type="info" style="font-family:var(--cyber-font-mono)">{{ row.cron_expr }}</el-tag>
-            <span v-else style="color:#909399;font-size:12px">—</span>
+            <el-tag v-if="row.cron_expr" size="small" type="info" style="font-family:var(--font-mono)">{{ row.cron_expr }}</el-tag>
+            <span v-else style="color:var(--text-secondary);font-size:12px">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="description" label="Description" show-overflow-tooltip min-width="140" />
@@ -49,19 +49,19 @@
 
     <!-- Group execution logs drawer -->
     <el-drawer v-model="drawerVisible" :title="'History: ' + logGroupName" size="66%" direction="rtl">
-      <div v-if="groupLogs.length===0" style="text-align:center;padding:40px;color:#909399">No executions yet</div>
+      <div v-if="groupLogs.length===0" style="text-align:center;padding:40px;color:var(--text-secondary)">No executions yet</div>
       <el-timeline v-else>
         <el-timeline-item v-for="log in groupLogs" :key="log.id" :timestamp="log.start_time" placement="top"
           :color="log.status==='success'?'#67C23A':log.status==='failed'?'#F56C6C':log.status==='partial'?'#E6A23C':'#909399'">
-          <el-card shadow="hover" class="glass-card">
+          <el-card shadow="hover" class="data-card">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
               <div style="display:flex;align-items:center;gap:8px">
                 <el-tag :type="log.status==='success'?'success':log.status==='failed'?'danger':'warning'" size="small">{{ log.status }}</el-tag>
                 <el-tag size="small" type="info">{{ log.trigger_type }}</el-tag>
-                <span style="font-size:12px;color:#909399">OK:{{ log.success_count }} FAIL:{{ log.failed_count }}/{{ log.member_count }}</span>
+                <span style="font-size:12px;color:var(--text-secondary)">OK:{{ log.success_count }} FAIL:{{ log.failed_count }}/{{ log.member_count }}</span>
               </div>
             </div>
-            <div v-if="log.error_msg" style="font-size:12px;color:#F56C6C">{{ log.error_msg }}</div>
+            <div v-if="log.error_msg" style="font-size:12px;color:var(--error-color)">{{ log.error_msg }}</div>
           </el-card>
         </el-timeline-item>
       </el-timeline>

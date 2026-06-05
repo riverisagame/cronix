@@ -105,7 +105,7 @@
           <template #default="{ row }">
             <template v-if="row.run_mode === 'daemon'">
               <el-tag size="small" :type="daemonStatusColor(getDaemonStatus(row.id))">{{ getDaemonStatus(row.id) }}</el-tag>
-              <div v-if="getDaemonStatus(row.id) === 'RUNNING'" style="font-size:12px;color:#909399;margin-top:2px">Up: {{ formatUptime(getDaemonUptime(row.id)) }}</div>
+              <div v-if="getDaemonStatus(row.id) === 'RUNNING'" style="font-size:12px;color:var(--text-secondary);margin-top:2px">Up: {{ formatUptime(getDaemonUptime(row.id)) }}</div>
             </template>
             <template v-else>
               <!-- 用 el-tag 标签显示 Cron 表达式，type="info" 灰色标签 -->
@@ -129,7 +129,7 @@
         <el-table-column label="Group" width="130">
           <template #default="{ row }">
             <el-tag v-if="row.group_name" size="small" type="warning">{{ row.group_name }}</el-tag>
-            <span v-else style="color:#909399;font-size:12px">—</span>
+            <span v-else style="color:var(--text-secondary);font-size:12px">—</span>
           </template>
         </el-table-column>
 
@@ -215,7 +215,7 @@
             <!-- 关系流向箭头与特效 -->
             <defs>
               <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="rgba(255,255,255,0.15)" />
+                <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="var(--text-secondary)" />
               </marker>
               <marker id="arrow-active" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#10b981" />
@@ -327,11 +327,11 @@
       size="700px" 抽屉宽度 700 像素
       direction="rtl" 从右侧滑出（Right To Left）
     -->
-    <el-drawer v-model="drawerVisible" :title="'History: '+logTaskName" size="66%" direction="rtl">
+    <el-drawer v-model="drawerVisible" :title="'History: '+logTaskName" size="80%" direction="rtl">
       <!--
         如果该任务的执行日志为空，显示提示信息
       -->
-      <div v-if="taskLogs.length===0" style="text-align:center;padding:40px;color:#909399">
+      <div v-if="taskLogs.length===0" style="text-align:center;padding:40px;color:var(--text-secondary)">
         <p>No executions yet</p>
       </div>
 
@@ -359,7 +359,7 @@
                 v-if="log.exit_code!==null" 如果退出码不为 null 才显示
                 !== null 表示"有值就显示"，null 代表还没有结束（任务还在运行中）
               -->
-              <span v-if="log.exit_code!==null" style="font-size:12px;color:#909399">exit={{ log.exit_code }}</span>
+              <span v-if="log.exit_code!==null" style="font-size:12px;color:var(--el-text-color-secondary);font-family:var(--font-mono)">{{ log.start_time?.substring(11,19) }}</span>
             </div>
             <!--
               程序输出内容（pre 标签保留原始格式，包括空格和换行）
@@ -368,12 +368,12 @@
               word-break:break-all 长单词/长字符串自动截断换行（防止撑破容器）
               max-height:200px 最高 200px，超过出现滚动条
             -->
-            <pre v-if="log.output" style="background:#f5f7fa;color:#303133;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow:auto;margin:0">{{ log.output }}</pre>
+            <pre v-if="log.output" style="background:#f5f7fa;color:#303133;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;margin:0">{{ log.output }}</pre>
             <!--
               错误信息（如果存在）
               背景浅红色，红色文字，样式和输出内容类似但颜色不同，以示区分
             -->
-            <pre v-if="log.error_msg" style="background:#fef0f0;color:#F56C6C;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:150px;overflow:auto;margin:0;margin-top:8px">{{ log.error_msg }}</pre>
+            <pre v-if="log.error_msg" style="background:#fef0f0;color:#F56C6C;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:0;margin-top:8px">{{ log.error_msg }}</pre>
           </el-card>
         </el-timeline-item>
       </el-timeline>
@@ -772,9 +772,8 @@ onUnmounted(() => {
   width: 100%;
   overflow: auto;
   border-radius: 8px;
-  background: rgba(10, 15, 30, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   padding: 15px;
 }
 .topology-wrapper {
@@ -784,7 +783,7 @@ onUnmounted(() => {
 
 /* 连线基本态与荧光流动激活态 */
 .neon-line {
-  stroke: rgba(255, 255, 255, 0.12);
+  stroke: var(--border-color);
   stroke-width: 1.5px;
   transition: stroke 0.3s, stroke-width 0.3s;
 }
@@ -804,27 +803,26 @@ onUnmounted(() => {
 
 /* 节点背景毛玻璃底板 */
 .glass-node-rect {
-  fill: rgba(20, 27, 45, 0.85);
-  stroke: rgba(255, 255, 255, 0.1);
+  fill: #ffffff;
+  stroke: var(--border-color);
   stroke-width: 1px;
-  backdrop-filter: blur(10px);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .glass-node-rect:hover, .node-hovered {
-  fill: rgba(25, 35, 60, 0.95);
+  fill: var(--bg-color-page);
   stroke: rgba(16, 185, 129, 0.8);
   filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.35));
 }
 
 /* 节点内元素 */
 .node-id {
-  font-family: var(--cyber-font-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
-  fill: rgba(255, 255, 255, 0.4);
+  fill: var(--text-secondary);
 }
 .node-name {
   font-size: 13px;
-  fill: #e2e8f0;
+  fill: var(--text-main);
   font-weight: 500;
 }
 
@@ -845,7 +843,7 @@ onUnmounted(() => {
 
 /* 任务类型标签 */
 .type-tag-rect {
-  fill: rgba(255, 255, 255, 0.05);
+  fill: var(--bg-color-page);
   stroke-width: 1px;
 }
 .type-tag-rect.shell { stroke: rgba(14, 165, 233, 0.5); fill: rgba(14, 165, 233, 0.1); }
@@ -854,9 +852,9 @@ onUnmounted(() => {
 .type-tag-rect.healthcheck { stroke: rgba(100, 116, 139, 0.5); fill: rgba(100, 116, 139, 0.1); }
 
 .type-tag-text {
-  font-family: var(--cyber-font-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9px;
-  fill: #c8d3e6;
+  fill: var(--text-secondary);
   text-anchor: middle;
 }
 
@@ -869,8 +867,8 @@ onUnmounted(() => {
   opacity: 1;
 }
 .run-circle {
-  fill: rgba(255, 255, 255, 0.08);
-  stroke: rgba(255, 255, 255, 0.2);
+  fill: var(--bg-color-page);
+  stroke: var(--border-color);
   stroke-width: 1px;
   transition: all 0.2s;
 }
@@ -879,7 +877,7 @@ onUnmounted(() => {
   stroke: #10b981;
 }
 .run-polygon {
-  fill: rgba(255, 255, 255, 0.6);
+  fill: var(--text-secondary);
   transition: fill 0.2s;
 }
 .quick-run-btn:hover .run-polygon {
@@ -902,17 +900,4 @@ onUnmounted(() => {
   to { transform: translate(132px, 34px) rotate(360deg); }
 }
 
-/* 查看历史日志抽屉深度美化 */
-:deep(.el-drawer) {
-  background: rgba(15, 23, 42, 0.95) !important;
-  backdrop-filter: blur(15px);
-  border-left: 1px solid rgba(255, 255, 255, 0.05);
-}
-:deep(.el-drawer__title) {
-  color: #f1f5f9 !important;
-  font-weight: 600;
-}
-:deep(.el-timeline-item__node) {
-  box-shadow: 0 0 8px currentColor;
-}
 </style>

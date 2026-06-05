@@ -10,7 +10,7 @@ export default defineConfig({
   timeout: 30000,
   globalSetup: 'tests/e2e/global-setup.ts',
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL: 'http://localhost:3000',
     browserName: 'chromium',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -24,9 +24,9 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: 'echo "Server must be started externally (Go binary)"',
-    url: 'http://localhost:8080/api/health',
-    reuseExistingServer: true,
-  },
+  // webServer: {
+  //   command: 'echo "Server must be started externally (Go binary)"',
+  //   url: 'http://localhost:8080/api/health',
+  //   reuseExistingServer: true,
+  // },
 })

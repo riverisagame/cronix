@@ -13,14 +13,14 @@
     - background:radial-gradient 深色背景，和整体暗色主题一致
   -->
   <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-  <div style="display:flex;justify-content:center;align-items:center;height:100vh;background:radial-gradient(circle at center, #161823 0%, #0c0d12 100%)">
+  <div style="display:flex;justify-content:center;align-items:center;height:100vh;background:linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)">
     <!--
       el-card：ElementPlus 的"卡片"组件，这里被磨砂玻璃化
       style="width:400px" 卡片宽度固定 400 像素
     -->
-    <el-card class="glass-card" style="width:400px">
+    <el-card class="data-card" style="width:400px;padding:10px;">
       <!-- 标题：Cronix Login，深色文字，居中显示 -->
-      <h2 style="text-align:center;margin-bottom:24px;color:#e5e7eb">Cronix Login</h2>
+      <h2 style="text-align:center;margin-bottom:24px;color:var(--text-main)">Cronix Login</h2>
 
       <!--
         el-form：ElementPlus 的表单组件

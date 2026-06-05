@@ -10,7 +10,7 @@
     如果当前页面是登录页，就只显示一个全屏的深色容器，里面放路由切换内容（即登录表单）
     这样做是为了让登录页看起来独立、简洁，不显示左侧菜单栏
   -->
-  <div v-if="isLoginPage" style="height:100vh;background:#141414">
+  <div v-if="isLoginPage" style="height:100vh;background:var(--bg-color)">
     <!--
       <router-view /> 是一个"占位符"组件。
       Vue Router（路由系统）会根据当前浏览器地址，决定在这一块显示哪个页面组件。
@@ -24,7 +24,7 @@
     el-container 是 ElementPlus 提供的容器组件，用于搭建页面整体结构
     style="height:100vh" 让容器撑满整个浏览器窗口高度
   -->
-  <el-container v-else style="height:100vh;background:#141414">
+  <el-container v-else style="height:100vh;background:var(--bg-color)">
     <!--
       el-aside：左侧侧边栏区域，宽度固定为 220 像素
     -->
@@ -41,16 +41,16 @@
       <el-menu
         :default-active="activeMenu"
         router
-        background-color="#1d1e1f"
-        text-color="#a3a6ad"
-        active-text-color="#409EFF"
-        style="height:100%;border-right:none"
+        background-color="#ffffff"
+        text-color="#475569"
+        active-text-color="var(--primary-color)"
+        style="height:100%;border-right:1px solid var(--border-color)"
       >
         <!--
           应用名称和 Logo：一个居中显示的标题 "Cronix"
           letter-spacing 让字母之间有一点间距，看起来更美观
         -->
-        <div style="padding:18px 20px;font-weight:700;font-size:17px;color:#e5e7eb;text-align:center;letter-spacing:1px">Cronix</div>
+        <div style="padding:18px 20px;font-weight:700;font-size:17px;color:var(--text-main);text-align:center;letter-spacing:1px">Cronix</div>
 
         <!--
           菜单项 index="/"：点击后跳转到网站根路径 /（即 Dashboard 仪表盘页）
@@ -104,19 +104,19 @@
         页面顶部栏（el-header）：高度 52px，用 flex 布局使内容垂直居中
         border-bottom 在底部加一条分隔线，把标题栏和内容区分开
       -->
-      <el-header style="display:flex;align-items:center;border-bottom:1px solid #333;background:#1d1e1f" height="52px">
+      <el-header style="display:flex;align-items:center;border-bottom:1px solid var(--border-color);background:#ffffff" height="52px">
         <!--
           标题文字：显示当前页面名称（Dashboard / Tasks / Settings 等）
           {{ pageTitle }} 是双花括号插值语法，把 JavaScript 变量的值显示在这里
         -->
-        <span style="font-size:13px;color:#a3a6ad;letter-spacing:1px">{{ pageTitle }}</span>
+        <span style="font-size:13px;color:var(--text-secondary);letter-spacing:1px;font-weight:500">{{ pageTitle }}</span>
       </el-header>
 
       <!--
         主内容区域（el-main）：页面切换动画的核心区域
         background 设置背景色为深色
       -->
-      <el-main style="background:#141414">
+      <el-main style="background:var(--bg-color);padding:20px;">
         <!--
           router-view 的 v-slot 写法：拿到当前要显示的组件对象（Component）
           配合 <transition> 实现页面切换时的淡入淡出动画效果
@@ -232,78 +232,87 @@ const isLoginPage = computed(() => route.path === '/login')
     > Microsoft YaHei（微软雅黑）> Arial（通用英文字体）> sans-serif（系统默认无衬线字体）
 */
 :root {
-  /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
-  --cyber-bg: #0c0d12;
-  --cyber-surface: rgba(22, 25, 34, 0.7);
-  --cyber-border: rgba(64, 158, 255, 0.12);
-  --cyber-glow-blue: rgba(64, 158, 255, 0.18);
-  --cyber-green: #10b981;
-  --cyber-glow-green: rgba(16, 185, 129, 0.35);
-  --cyber-red: #ef4444;
-  --cyber-font-mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+  --bg-color: #F8FAFC;
+  --surface-color: #FFFFFF;
+  --primary-color: #3B82F6;
+  --secondary-color: #60A5FA;
+  --cta-color: #F97316;
+  --text-main: #1E293B;
+  --text-secondary: #475569;
+  --border-color: #E2E8F0;
+  --success-color: #10B981;
+  --error-color: #EF4444;
+  --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
+  --font-sans: 'Fira Sans', 'Helvetica Neue', Helvetica, sans-serif;
 }
 
 body {
   margin: 0;
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
-  background-color: var(--cyber-bg) !important;
-  color: #e5e7eb;
+  font-family: var(--font-sans);
+  background-color: var(--bg-color) !important;
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 磨砂玻璃卡片 */
-.glass-card {
-  /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
-  background: var(--cyber-surface) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--cyber-border) !important;
-  border-radius: 12px !important;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  will-change: transform, box-shadow;
+/* 专业数据卡片 */
+.data-card {
+  background: var(--surface-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+  transition: all 0.2s ease-in-out;
+  color: var(--text-main) !important;
 }
 
-.glass-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(64, 158, 255, 0.35) !important;
-  box-shadow: 0 12px 30px var(--cyber-glow-blue) !important;
+.data-card:hover {
+  border-color: var(--secondary-color) !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* 覆盖 ElementPlus 的一些默认文字颜色，使其适配亮色主题 */
+.el-card__header {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.el-table {
+  --el-table-border-color: var(--border-color) !important;
+  --el-table-header-bg-color: #F1F5F9 !important;
+  --el-table-header-text-color: var(--text-main) !important;
+  --el-table-text-color: var(--text-main) !important;
+  --el-table-row-hover-bg-color: #EFF6FF !important;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell {
+  background-color: var(--el-table-header-bg-color) !important;
+  font-weight: 600;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--primary-color) !important;
+  --el-button-border-color: var(--primary-color) !important;
+  --el-button-hover-bg-color: var(--secondary-color) !important;
+  --el-button-hover-border-color: var(--secondary-color) !important;
 }
 
 /* 状态呼吸圆点指示器 */
 .status-dot {
-  /* @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 */
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  margin-right: 10px;
+  margin-right: 8px;
   vertical-align: middle;
-  transition: all 0.3s ease;
 }
 
 .status-dot.active {
-  background-color: var(--cyber-green);
-  animation: pulse-green 2s infinite;
+  background-color: var(--success-color);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 
 .status-dot.inactive {
-  background-color: #5c5e66;
-  box-shadow: none;
-}
-
-/* 雷达绿光扩散呼吸动画 */
-@keyframes pulse-green {
-  0% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.75);
-  }
-  70% {
-    transform: scale(1.1);
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
-  }
-  100% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-  }
+  background-color: #94A3B8;
 }
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
