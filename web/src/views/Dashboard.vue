@@ -168,17 +168,14 @@
 
             <!-- 状态列 -->
             <el-table-column prop="status" label="Status" width="90">
-              <!--
-                #default="{ row }" 是列的自定义渲染插槽
-                row 是当前行的数据对象
-              -->
               <template #default="{ row }">
-                <!--
-                  el-tag 根据 status 值显示不同颜色：
-                  success -> 绿色（success类型），其他 -> 红色（danger类型）
-                  .toUpperCase() 把英文转成大写字母显示
-                -->
-                <el-tag :type="row.status==='success'?'success':'danger'" size="small">{{ row.status?.toUpperCase() }}</el-tag>
+                <el-tag 
+                  :type="row.status === 'success' ? 'success' : row.status === 'running' ? 'primary' : row.status === 'timeout' ? 'warning' : 'danger'" 
+                  :effect="row.status === 'running' ? 'dark' : 'light'"
+                  size="small"
+                >
+                  {{ row.status?.toUpperCase() }}
+                </el-tag>
               </template>
             </el-table-column>
 

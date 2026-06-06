@@ -10,7 +10,7 @@ export default defineConfig({
   timeout: 30000,
   globalSetup: 'tests/e2e/global-setup.ts',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080',
     browserName: 'chromium',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',

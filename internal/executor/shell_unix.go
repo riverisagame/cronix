@@ -329,19 +329,20 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		hasSudo = false
 	}
 
-	// nice -n <Nice> ionice -c <Class> [sudo -u <User>] sh -c <Cmd>
+	// nice -n <Nice> ionice -c <Class> [sudo -u <User>] sh
+	// 将 command 通过 stdin 传入，避免 sudo 记录大段含换行的命令导致 syslog 混乱
 	var cmdArgs []string
 	if hasSudo {
 		cmdArgs = []string{
 			"nice", "-n", fmt.Sprintf("%d", niceValue),
 			"ionice", "-c", fmt.Sprintf("%d", ioNiceClass),
-			"sudo", "-u", targetUser, "sh", "-c", command,
+			"sudo", "-u", targetUser, "sh",
 		}
 	} else {
 		cmdArgs = []string{
 			"nice", "-n", fmt.Sprintf("%d", niceValue),
 			"ionice", "-c", fmt.Sprintf("%d", ioNiceClass),
-			"sh", "-c", command,
+			"sh",
 		}
 	}
 
@@ -369,6 +370,8 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
+	
+	cmd.Stdin = strings.NewReader(command)
 	
 	// 设置进程组属性以实现进程组强杀隔离
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

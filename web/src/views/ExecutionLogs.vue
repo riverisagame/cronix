@@ -142,8 +142,9 @@ const columns: Column<any>[] = [
     key: 'status', title: 'Status', width: 100, dataKey: 'status',
     cellRenderer: ({ cellData }: any) => {
       const val = cellData ?? ''
-      const type = val === 'success' ? 'success' : val === 'failed' ? 'danger' : val === 'timeout' ? 'warning' : 'info'
-      return h(ElTag, { type, size: 'small' }, () => val.toUpperCase())
+      const type = val === 'success' ? 'success' : val === 'failed' ? 'danger' : val === 'timeout' ? 'warning' : val === 'running' ? 'primary' : 'info'
+      const effect = val === 'running' ? 'dark' : 'light'
+      return h(ElTag, { type, effect, size: 'small' }, () => val.toUpperCase())
     }
   },
   { key: 'trigger_type', title: 'Trigger', width: 90, dataKey: 'trigger_type' },
