@@ -30,9 +30,14 @@ test.describe('Groups', () => {
   })
 
   test('create group saves and redirects', async ({ page }) => {
+    const groupsPage = new GroupListPage(page)
+    await groupsPage.goto()
+    await page.waitForTimeout(500)
+    await groupsPage.clickNewGroup()
+    
     const groupEdit = new GroupEditPage(page)
-    await groupEdit.gotoNew()
-    await groupEdit.fillName('e2e-test-group')
+    const uniqueName = `e2e-test-group-${Date.now()}`
+    await groupEdit.fillName(uniqueName)
     await groupEdit.clickSave()
     await groupEdit.expectSaved()
   })
