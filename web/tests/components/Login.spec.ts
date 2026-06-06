@@ -22,7 +22,11 @@ function mountLogin() {
       plugins: [router],
       stubs: {
         'el-card': { template: '<div class="el-card"><slot /></div>' },
-        'el-form': { template: '<form @submit.prevent="void(0)"><slot /></form>' },
+        // inheritAttrs:false + v-bind="$attrs" 让父组件的 @submit.prevent 透传到原生 <form>
+        'el-form': {
+          template: '<form v-bind="$attrs"><slot /></form>',
+          inheritAttrs: false,
+        },
         'el-form-item': {
           template: '<div><slot /></div>',
           props: ['label'],
@@ -30,12 +34,23 @@ function mountLogin() {
         'el-input': {
           template:
             '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" :type="type" :placeholder="placeholder" />',
-          props: ['modelValue', 'type', 'placeholder', 'showPassword'],
+          props: ['modelValue', 'type', 'placeholder', 'showPassword', 'size'],
         },
+        // happy-dom 中 click submit 按钮不会自动触发 form submit，需手动 dispatch
         'el-button': {
           template:
-            '<button :disabled="loading" @click="$emit(\'click\')"><slot /></button>',
-          props: ['loading', 'type'],
+            '<button :disabled="loading" :type="nativeType || \'button\'" @click="handleClick"><slot /></button>',
+          props: ['loading', 'type', 'nativeType', 'size'],
+          emits: ['click'],
+          methods: {
+            handleClick() {
+              this.$emit('click')
+              if (this.nativeType === 'submit') {
+                const form = this.$el.closest('form')
+                if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))
+              }
+            }
+          }
         },
         'el-alert': {
           template: '<div v-if="title" role="alert" :data-testid="\'login-error\'">{{ title }}</div>',
