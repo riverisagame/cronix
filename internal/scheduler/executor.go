@@ -179,35 +179,17 @@ func (e *Executor) RunTaskNow(taskID uint) {
     }()
 }
 
-// handleTrigger 处理定时器触发的任务（走完整DAG依赖解析）
+// handleTrigger 处理定时器触发的任务
 func (e *Executor) handleTrigger(taskID uint) {
-    // 查询所有启用的任务
-    var tasks []model.Task
-    if err := e.db.Where("enabled = ?", true).Find(&tasks).Error; err != nil {
-        log.Error().Err(err).Msg("fetch tasks for DAG")
-        return
-    }
-    dag := e.buildDAG(tasks)                                    // 构建依赖图
-    layers := dag.TopologicalSort()                              // 按依赖分层排序
-
-    // 逐层执行
-    for _, layer := range layers {
-        var wg sync.WaitGroup
-        for _, nodeID := range layer {
-            wg.Add(1)
-            nID := nodeID
-            e.pool.Submit(func() {
-                defer wg.Done()
-                defer func() {
-                    if r := recover(); r != nil {
-                        log.Error().Interface("panic", r).Uint("task_id", nID).Msg("task panic recovered")
-                    }
-                }()
-                e.executeTask(nID)
-            })
-        }
-        wg.Wait()
-    }
+    // 仅执行当前被定时器触发的任务，不再全量扫表牵连无关任务
+    go func() {
+        defer func() {
+            if r := recover(); r != nil {
+                log.Error().Interface("panic", r).Uint("task_id", taskID).Msg("cron task panic")
+            }
+        }()
+        e.executeTask(taskID)
+    }()
 }
 
 // buildDAG 根据数据库中的任务和依赖关系构建依赖图
