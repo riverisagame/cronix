@@ -39,7 +39,7 @@
             @clear="load" 清空时自动刷新列表
             @keyup.enter="load" 按回车键时自动搜索
           -->
-          <el-input v-model="search" placeholder="Search by name..." clearable @clear="load" @keyup.enter="load" data-testid="task-search">
+          <el-input v-model="search" placeholder="Search by name..." clearable @clear="load" @keyup.enter="load" data-testid="task-search" size="large">
             <!-- #prefix 插槽：在输入框左侧放一个搜索图标 -->
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
@@ -55,7 +55,7 @@
             @change="load" 选择变化时自动刷新列表
             style="width:100%" 宽度撑满
           -->
-          <el-select v-model="filterType" placeholder="All Types" clearable @change="load" style="width:100%" data-testid="task-type-filter">
+          <el-select v-model="filterType" placeholder="All Types" clearable @change="load" style="width:100%" data-testid="task-type-filter" size="large">
             <!-- el-option：下拉选项，label 是显示文字，value 是实际值 -->
             <el-option label="Shell" value="shell" />
             <el-option label="HTTP" value="http" />
@@ -67,7 +67,7 @@
         <!-- 刷新按钮，占 4/24 宽度 -->
         <el-col :span="4">
           <!-- @click="load" 点击刷新按钮时重新从后端加载任务列表 -->
-          <el-button @click="load" data-testid="btn-refresh-tasks"><el-icon><Refresh /></el-icon> Refresh</el-button>
+          <el-button size="large" @click="load" data-testid="btn-refresh-tasks"><el-icon><Refresh /></el-icon> Refresh</el-button>
         </el-col>
       </el-row>
 
@@ -104,12 +104,12 @@
         <el-table-column label="Cron / Mode" width="160">
           <template #default="{ row }">
             <template v-if="row.run_mode === 'daemon'">
-              <el-tag size="small" :type="daemonStatusColor(getDaemonStatus(row.id))">{{ getDaemonStatus(row.id) }}</el-tag>
+              <el-tag :type="daemonStatusColor(getDaemonStatus(row.id))">{{ getDaemonStatus(row.id) }}</el-tag>
               <div v-if="getDaemonStatus(row.id) === 'RUNNING'" style="font-size:12px;color:var(--text-secondary);margin-top:2px">Up: {{ getDaemonUptime(row.id) }}</div>
             </template>
             <template v-else>
               <!-- 用 el-tag 标签显示 Cron 表达式，type="info" 灰色标签 -->
-              <el-tag size="small" type="info">{{ row.cron_expr || 'None' }}</el-tag>
+              <el-tag type="info">{{ row.cron_expr || 'None' }}</el-tag>
             </template>
           </template>
         </el-table-column>
@@ -121,14 +121,14 @@
               :type="typeColor(row.task_type)" 调用 typeColor 函数，
               根据任务类型返回对应的 ElementPlus 标签颜色名
             -->
-            <el-tag :type="typeColor(row.task_type)" size="small">{{ row.task_type }}</el-tag>
+            <el-tag :type="typeColor(row.task_type)">{{ row.task_type }}</el-tag>
           </template>
         </el-table-column>
 
         <!-- 所属任务组列 -->
         <el-table-column label="Group" width="130">
           <template #default="{ row }">
-            <el-tag v-if="row.group_name" size="small" type="warning">{{ row.group_name }}</el-tag>
+            <el-tag v-if="row.group_name" type="warning">{{ row.group_name }}</el-tag>
             <span v-else style="color:var(--text-secondary);font-size:12px">—</span>
           </template>
         </el-table-column>
@@ -172,24 +172,24 @@
               编辑按钮：圆形图标按钮（circle），蓝色（primary）
               @click="router.push('/tasks/'+row.id)" 跳转到任务编辑页
             -->
-            <el-button size="small" type="primary" @click="router.push('/tasks/'+row.id)" circle><el-icon><Edit /></el-icon></el-button>
+            <el-button type="primary" @click="router.push('/tasks/'+row.id)" circle><el-icon><Edit /></el-icon></el-button>
 
             <!--
               执行/启停按钮：根据任务模式区分
             -->
             <template v-if="row.run_mode === 'daemon'">
-              <el-button size="small" type="success" @click="startDaemonTask(row)" :disabled="getDaemonStatus(row.id) === 'RUNNING'" circle title="Start Daemon"><el-icon><VideoPlay /></el-icon></el-button>
-              <el-button size="small" type="danger" @click="stopDaemonTask(row)" :disabled="getDaemonStatus(row.id) === 'STOPPED' || getDaemonStatus(row.id) === 'FATAL'" circle title="Stop Daemon"><el-icon><VideoPause /></el-icon></el-button>
+              <el-button type="success" @click="startDaemonTask(row)" :disabled="getDaemonStatus(row.id) === 'RUNNING'" circle title="Start Daemon"><el-icon><VideoPlay /></el-icon></el-button>
+              <el-button type="danger" @click="stopDaemonTask(row)" :disabled="getDaemonStatus(row.id) === 'STOPPED' || getDaemonStatus(row.id) === 'FATAL'" circle title="Stop Daemon"><el-icon><VideoPause /></el-icon></el-button>
             </template>
             <template v-else>
-              <el-button size="small" type="success" @click="runTask(row)" :loading="runningId===row.id" circle data-testid="btn-run-task" title="Run Once"><el-icon><VideoPlay /></el-icon></el-button>
+              <el-button type="success" @click="runTask(row)" :loading="runningId===row.id" circle data-testid="btn-run-task" title="Run Once"><el-icon><VideoPlay /></el-icon></el-button>
             </template>
 
             <!--
               查看日志按钮：圆形默认按钮
               @click="showLogs(row)" 打开侧边抽屉显示该任务的执行历史
             -->
-            <el-button size="small" @click="showLogs(row)" circle data-testid="btn-task-logs"><el-icon><Tickets /></el-icon></el-button>
+            <el-button @click="showLogs(row)" circle data-testid="btn-task-logs"><el-icon><Tickets /></el-icon></el-button>
 
             <!--
               删除按钮：使用 el-popconfirm 包裹，点击后弹出确认气泡
@@ -201,7 +201,7 @@
                 #reference 插槽：定义触发弹出框的元素
                 这里是红色圆形删除按钮
               -->
-              <template #reference><el-button size="small" type="danger" circle><el-icon><Delete /></el-icon></el-button></template>
+              <template #reference><el-button type="danger" circle><el-icon><Delete /></el-icon></el-button></template>
             </el-popconfirm>
           </template>
         </el-table-column>

@@ -18,7 +18,7 @@
         <el-table-column prop="name" label="Name" min-width="150" />
         <el-table-column prop="mode" label="Mode" width="130">
           <template #default="{ row }">
-            <el-tag :type="row.mode==='parallel'?'success':''" size="small">
+            <el-tag :type="row.mode==='parallel'?'success':''">
               {{ row.mode === 'parallel' ? 'Parallel' : 'Sequential' }}
             </el-tag>
           </template>
@@ -26,21 +26,21 @@
         <el-table-column label="Cron" width="160">
           <template #default="{ row }">
             <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-            <el-tag v-if="row.cron_expr" size="small" type="info" style="font-family:var(--font-mono)">{{ row.cron_expr }}</el-tag>
+            <el-tag v-if="row.cron_expr" type="info" style="font-family:var(--font-mono)">{{ row.cron_expr }}</el-tag>
             <span v-else style="color:var(--text-secondary);font-size:12px">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="description" label="Description" show-overflow-tooltip min-width="140" />
         <el-table-column label="Actions" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="router.push('/groups/'+row.id)" circle><el-icon><Edit /></el-icon></el-button>
-            <el-button size="small" type="success" @click="runGroup(row)" :loading="runningId===row.id" circle><el-icon><VideoPlay /></el-icon></el-button>
-            <el-button size="small" @click="showLogs(row)" circle><el-icon><Tickets /></el-icon></el-button>
+            <el-button type="primary" @click="router.push('/groups/'+row.id)" circle><el-icon><Edit /></el-icon></el-button>
+            <el-button type="success" @click="runGroup(row)" :loading="runningId===row.id" circle><el-icon><VideoPlay /></el-icon></el-button>
+            <el-button @click="showLogs(row)" circle><el-icon><Tickets /></el-icon></el-button>
             <el-popconfirm title="Clear all execution logs for this group?" @confirm="clearGroupLogs(row.id)">
-              <template #reference><el-button size="small" type="warning" circle><el-icon><DeleteFilled /></el-icon></el-button></template>
+              <template #reference><el-button type="warning" circle><el-icon><DeleteFilled /></el-icon></el-button></template>
             </el-popconfirm>
             <el-popconfirm :title="'Delete group \'' + row.name + '\'? Tasks will be kept, logs cleared.'" @confirm="deleteGroup(row.id, row.name)">
-              <template #reference><el-button size="small" type="danger" circle><el-icon><Delete /></el-icon></el-button></template>
+              <template #reference><el-button type="danger" circle><el-icon><Delete /></el-icon></el-button></template>
             </el-popconfirm>
           </template>
         </el-table-column>
@@ -56,8 +56,8 @@
           <el-card shadow="hover" class="data-card">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
               <div style="display:flex;align-items:center;gap:8px">
-                <el-tag :type="log.status==='success'?'success':log.status==='failed'?'danger':'warning'" size="small">{{ log.status }}</el-tag>
-                <el-tag size="small" type="info">{{ log.trigger_type }}</el-tag>
+                <el-tag :type="log.status==='success'?'success':log.status==='failed'?'danger':'warning'">{{ log.status }}</el-tag>
+                <el-tag type="info">{{ log.trigger_type }}</el-tag>
                 <span style="font-size:12px;color:var(--text-secondary)">OK:{{ log.success_count }} FAIL:{{ log.failed_count }}/{{ log.member_count }}</span>
               </div>
             </div>
@@ -70,7 +70,7 @@
       </div>
       <div style="margin-top:12px;text-align:center">
         <el-popconfirm title="Clear all execution logs for this group?" @confirm="clearGroupLogs(logGroupId)">
-          <template #reference><el-button size="small" type="danger" :loading="clearingLogs">Clear Group Logs</el-button></template>
+          <template #reference><el-button type="danger" :loading="clearingLogs">Clear Group Logs</el-button></template>
         </el-popconfirm>
       </div>
     </el-drawer>

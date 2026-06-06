@@ -26,9 +26,9 @@
   -->
   <el-container v-else style="height:100vh;background:var(--bg-color)">
     <!--
-      el-aside：左侧侧边栏区域，宽度固定为 220 像素
+      el-aside：左侧侧边栏区域，宽度固定为 240 像素
     -->
-    <el-aside width="220px">
+    <el-aside width="240px">
       <!--
         el-menu：ElementPlus 提供的导航菜单组件
         :default-active="activeMenu" 动态绑定当前激活的菜单项（根据网址自动高亮）
@@ -267,13 +267,30 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 优雅的暗黑滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+::-webkit-scrollbar-thumb {
+  background: #3F3F46;
+  border-radius: 5px;
+  border: 2px solid var(--bg-color);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52525B;
+}
+
 /* 专业数据卡片 */
 .data-card {
   background: var(--surface-color) !important;
   border: 1px solid var(--border-color) !important;
-  border-radius: 8px !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
-  transition: all 0.2s ease-in-out;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.3s ease-in-out;
   color: var(--text-main) !important;
 }
 
@@ -296,8 +313,13 @@ body {
   --el-table-bg-color: var(--surface-color) !important;
   --el-table-tr-bg-color: var(--surface-color) !important;
   background-color: var(--surface-color) !important;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
+}
+
+/* 表格的行内边距调整为更舒适的高级感间距 */
+.el-table .el-table__cell {
+  padding: 14px 0 !important;
 }
 
 .el-table th.el-table__cell {
@@ -333,4 +355,28 @@ body {
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* Vibrant Running Tag Animation */
+@keyframes pulseVibrant {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 242, 254, 0.4);
+    border-color: rgba(0, 242, 254, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(0, 242, 254, 0);
+    border-color: rgba(0, 242, 254, 1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 242, 254, 0);
+    border-color: rgba(0, 242, 254, 0.5);
+  }
+}
+
+.tag-running-vibrant {
+  background: linear-gradient(135deg, rgba(0, 153, 255, 0.15), rgba(0, 242, 254, 0.15)) !important;
+  color: #00f2fe !important;
+  border: 1px solid #00f2fe !important;
+  animation: pulseVibrant 2s infinite;
+  font-weight: 600;
+}
 </style>

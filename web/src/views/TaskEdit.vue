@@ -34,7 +34,7 @@
         :model="form" 把表单数据绑定到 form 响应式对象上
         label-width="160px" 标签宽度
       -->
-      <el-form :model="form" label-width="160px" style="max-width:100%">
+      <el-form :model="form" label-width="160px" size="large" style="max-width:100%">
         <!--
           el-divider：分割线组件
           content-position="left" 文字靠左显示

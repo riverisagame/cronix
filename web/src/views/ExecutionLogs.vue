@@ -6,22 +6,22 @@
     <h2 style="margin-top:0;display:flex;align-items:center;gap:12px">
       Execution Logs
       <el-popconfirm title="Delete ALL execution logs?" @confirm="clearAllLogs">
-        <template #reference><el-button size="small" type="danger" :loading="clearing">Clear All</el-button></template>
+        <template #reference><el-button type="danger" :loading="clearing">Clear All</el-button></template>
       </el-popconfirm>
-      <el-button size="small" @click="exportLogs('csv')" :loading="exporting" :disabled="exporting" data-testid="btn-export-csv">Export CSV</el-button>
-      <el-button size="small" @click="exportLogs('json')" :loading="exporting" :disabled="exporting" data-testid="btn-export-json">Export JSON</el-button>
+      <el-button @click="exportLogs('csv')" :loading="exporting" :disabled="exporting" data-testid="btn-export-csv">Export CSV</el-button>
+      <el-button @click="exportLogs('json')" :loading="exporting" :disabled="exporting" data-testid="btn-export-json">Export JSON</el-button>
     </h2>
 
     <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
     <el-card shadow="hover" class="data-card" v-loading="loading">
       <el-row :gutter="16" style="margin-bottom:16px">
         <el-col :span="6">
-          <el-input v-model="filters.task_name" placeholder="Task name..." clearable @keyup.enter="load">
+          <el-input v-model="filters.task_name" placeholder="Task name..." clearable @keyup.enter="load" size="large">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
         </el-col>
         <el-col :span="4">
-          <el-select v-model="filters.status" placeholder="Status" clearable @change="load" style="width:100%" data-testid="log-status-filter">
+          <el-select v-model="filters.status" placeholder="Status" clearable @change="load" style="width:100%" data-testid="log-status-filter" size="large">
             <el-option label="Success" value="success" />
             <el-option label="Failed" value="failed" />
             <el-option label="Timeout" value="timeout" />
@@ -29,7 +29,7 @@
           </el-select>
         </el-col>
         <el-col :span="6">
-          <el-select v-model="filters.since" placeholder="Time range" clearable @change="load" style="width:100%" data-testid="log-time-filter">
+          <el-select v-model="filters.since" placeholder="Time range" clearable @change="load" style="width:100%" data-testid="log-time-filter" size="large">
             <el-option label="Last 1 hour" value="1h" />
             <el-option label="Last 6 hours" value="6h" />
             <el-option label="Last 24 hours" value="24h" />
@@ -37,8 +37,8 @@
           </el-select>
         </el-col>
         <el-col :span="4">
-          <el-button type="primary" @click="load"><el-icon><Search /></el-icon> Search</el-button>
-          <el-button @click="load"><el-icon><Refresh /></el-icon></el-button>
+          <el-button type="primary" size="large" @click="load"><el-icon><Search /></el-icon> Search</el-button>
+          <el-button size="large" @click="load"><el-icon><Refresh /></el-icon></el-button>
         </el-col>
       </el-row>
 
@@ -69,7 +69,7 @@
           <el-tag type="info">{{ detail.trigger_type }}</el-tag>
           <el-tag v-if="detail.exit_code!==null">exit={{ detail.exit_code }}</el-tag>
         </div>
-        <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
+        <el-descriptions :column="2" border style="margin-bottom:16px">
           <el-descriptions-item label="Task">{{ detail.task_name }}</el-descriptions-item>
           <el-descriptions-item label="Cron">{{ detail.cron_expr||'-' }}</el-descriptions-item>
           <el-descriptions-item label="Start">{{ detail.start_time }}</el-descriptions-item>
@@ -79,7 +79,7 @@
         <div v-if="detail.output" style="margin-bottom:16px">
           <div style="font-weight:bold;margin-bottom:8px;color:#67C23A">Output</div>
           <pre style="background:#f5f7fa;color:#303133;padding:14px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow:auto;margin:0">{{ outputDisplay }}</pre>
-          <el-button v-if="outputTruncated" size="small" text @click="showFullOutput = !showFullOutput" style="margin-top:4px">
+          <el-button v-if="outputTruncated" text @click="showFullOutput = !showFullOutput" style="margin-top:4px">
             {{ showFullOutput ? 'Collapse' : 'Show all (' + outputLineCount + ' lines)' }}
           </el-button>
         </div>
@@ -140,11 +140,12 @@ const columns: Column<any>[] = [
   { key: 'group_name', title: 'Group', width: 130, flexGrow: 1, dataKey: 'group_name' },
   {
     key: 'status', title: 'Status', width: 100, dataKey: 'status',
-    cellRenderer: ({ cellData }: any) => {
-      const val = cellData ?? ''
-      const type = val === 'success' ? 'success' : val === 'failed' ? 'danger' : val === 'timeout' ? 'warning' : val === 'running' ? 'primary' : 'info'
-      const effect = val === 'running' ? 'dark' : 'light'
-      return h(ElTag, { type, effect, size: 'small' }, () => val.toUpperCase())
+    cellRenderer: ({ cellData: val }) => {
+      if (val === 'running') {
+        return h(ElTag, { class: 'tag-running-vibrant', type: 'info' }, () => val.toUpperCase())
+      }
+      const type = val === 'success' ? 'success' : val === 'failed' ? 'danger' : val === 'timeout' ? 'warning' : 'info'
+      return h(ElTag, { type }, () => val ? val.toUpperCase() : '')
     }
   },
   { key: 'trigger_type', title: 'Trigger', width: 90, dataKey: 'trigger_type' },

@@ -6,7 +6,7 @@
     </div>
 
     <el-card shadow="hover" style="margin-bottom:20px">
-      <el-form :model="form" label-width="140px" style="max-width:100%">
+      <el-form :model="form" label-width="140px" size="large" style="max-width:100%">
         <el-form-item label="Name" required>
           <el-input v-model="form.name" placeholder="e.g. daily-backup-pipeline" data-testid="group-form-name" />
         </el-form-item>
@@ -60,12 +60,12 @@
         <!-- Available tasks -->
         <el-col :span="11">
           <h4 style="margin-top:0">Available Tasks</h4>
-          <el-input v-model="taskSearch" placeholder="Search..." size="small" style="margin-bottom:8px" />
+          <el-input v-model="taskSearch" placeholder="Search..." style="margin-bottom:8px" />
           <div style="border:1px solid var(--border-color, #dcdfe6);border-radius:4px;min-height:400px;max-height:600px;overflow:auto;padding:8px">
             <div v-for="t in availableTasks" :key="t.id"
               style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;margin-bottom:4px;background:#1d1e1f;border-radius:4px;cursor:pointer"
               @click="addMember(t)">
-              <span style="font-size:13px">{{ t.name }} <el-tag size="small" type="info" style="margin-left:4px">{{ t.task_type }}</el-tag></span>
+              <span style="font-size:13px">{{ t.name }} <el-tag type="info" style="margin-left:4px">{{ t.task_type }}</el-tag></span>
               <el-icon><Plus /></el-icon>
             </div>
             <div v-if="availableTasks.length===0" style="text-align:center;color:#909399;padding:20px">No tasks available</div>
@@ -91,15 +91,15 @@
               @dragend="onDragEnd"
               :style="memberItemStyle(idx)">
               <span style="display:flex;align-items:center;gap:8px">
-                <el-tag v-if="form.mode==='sequential'" size="small" :type="dragIdx === idx ? 'danger' : 'warning'" style="min-width:24px;text-align:center">{{ idx + 1 }}</el-tag>
+                <el-tag v-if="form.mode==='sequential'" :type="dragIdx === idx ? 'danger' : 'warning'" style="min-width:24px;text-align:center">{{ idx + 1 }}</el-tag>
                 <span style="font-size:13px">{{ t.name }}</span>
               </span>
               <span style="display:flex;gap:4px">
                 <template v-if="form.mode==='sequential'">
-                  <el-button size="small" :disabled="idx===0" @click="moveMember(idx, -1)" style="padding:2px 8px;font-size:14px" title="Move up">↑</el-button>
-                  <el-button size="small" :disabled="idx===members.length-1" @click="moveMember(idx, 1)" style="padding:2px 8px;font-size:14px" title="Move down">↓</el-button>
+                  <el-button :disabled="idx===0" @click="moveMember(idx, -1)" style="padding:2px 8px;font-size:14px" title="Move up">↑</el-button>
+                  <el-button :disabled="idx===members.length-1" @click="moveMember(idx, 1)" style="padding:2px 8px;font-size:14px" title="Move down">↓</el-button>
                 </template>
-                <el-button size="small" type="danger" circle @click="removeMember(t, idx)">
+                <el-button type="danger" circle @click="removeMember(t, idx)">
                   <el-icon><Close /></el-icon>
                 </el-button>
               </span>
@@ -113,7 +113,7 @@
       </el-row>
 
       <div style="margin-top:12px">
-        <el-button type="primary" size="small" :loading="savingMembers" @click="saveMembers">Save Members</el-button>
+        <el-button type="primary" size="large" :loading="savingMembers" @click="saveMembers">Save Members</el-button>
       </div>
     </el-card>
   </div>

@@ -33,7 +33,7 @@
             <div>
               <!-- 卡片小标题：Total Tasks（任务总数），小号灰色文字 -->
               <div style="font-size:12px;color:var(--text-secondary)">Total Tasks</div>
-              <div style="font-size:28px;font-weight:700;color:var(--text-main);font-family:var(--font-mono)">{{ stats.total_tasks || 0 }}</div>
+              <div style="font-size:36px;font-weight:700;color:var(--text-main);font-family:var(--font-mono)">{{ stats.total_tasks || 0 }}</div>
             </div>
           </div>
         </el-card>
@@ -48,7 +48,7 @@
             <el-icon :size="28" color="var(--success-color)"><CircleCheck /></el-icon>
             <div>
               <div style="font-size:12px;color:var(--text-secondary)">Enabled</div>
-              <div style="font-size:28px;font-weight:700;color:var(--success-color);font-family:var(--font-mono)">{{ stats.enabled_tasks || 0 }}</div>
+              <div style="font-size:36px;font-weight:700;color:var(--success-color);font-family:var(--font-mono)">{{ stats.enabled_tasks || 0 }}</div>
             </div>
           </div>
         </el-card>
@@ -63,7 +63,7 @@
             <el-icon :size="28" color="#f59e0b"><Timer /></el-icon>
             <div>
               <div style="font-size:12px;color:var(--text-secondary)">Today Runs</div>
-              <div style="font-size:28px;font-weight:700;color:#f59e0b;font-family:var(--font-mono)">{{ stats.today_total || 0 }}</div>
+              <div style="font-size:36px;font-weight:700;color:#f59e0b;font-family:var(--font-mono)">{{ stats.today_total || 0 }}</div>
             </div>
           </div>
         </el-card>
@@ -85,7 +85,7 @@
             <div>
               <div style="font-size:12px;color:var(--text-secondary)">Failures</div>
               <!-- 数字颜色也是动态的，和图标颜色保持一致 -->
-              <div style="font-size:28px;font-weight:700;font-family:var(--font-mono)" :style="{color: failColor}">{{ stats.today_failed || 0 }}</div>
+              <div style="font-size:36px;font-weight:700;font-family:var(--font-mono)" :style="{color: failColor}">{{ stats.today_failed || 0 }}</div>
             </div>
           </div>
         </el-card>
@@ -128,7 +128,7 @@
               -->
               <template #default="{ percentage }">
                 <!-- 在进度环中间显示大号百分比数字 -->
-                <span style="font-size:28px;font-weight:700;color:var(--text-main);font-family:var(--font-mono)">{{ percentage }}%</span>
+                <span style="font-size:36px;font-weight:700;color:var(--text-main);font-family:var(--font-mono)">{{ percentage }}%</span>
               </template>
             </el-progress>
           </div>
@@ -146,7 +146,7 @@
                 el-button：文本按钮（text 属性让按钮没有背景色，看起来像链接）
                 @click="$router.push('/logs')" 点击后跳转到日志页面
               -->
-              <el-button text size="small" type="primary" @click="$router.push('/logs')">View All</el-button>
+              <el-button text type="primary" @click="$router.push('/logs')">View All</el-button>
             </div>
           </template>
 
@@ -157,7 +157,7 @@
             size="small" 紧凑尺寸
             max-height="300" 表格最大高度 300px，超出后出现纵向滚动条
           -->
-          <el-table :data="recentLogs" stripe size="small" max-height="300">
+          <el-table :data="recentLogs" stripe max-height="400">
             <!--
               el-table-column：表格列定义
               prop="task_name" 对应数据中 task_name 字段的值
@@ -170,10 +170,8 @@
             <el-table-column prop="status" label="Status" width="90">
               <template #default="{ row }">
                 <el-tag 
-                  :type="row.status === 'success' ? 'success' : row.status === 'running' ? 'primary' : row.status === 'timeout' ? 'warning' : 'danger'" 
-                  :effect="row.status === 'running' ? 'dark' : 'light'"
-                  size="small"
-                >
+                  :type="row.status === 'success' ? 'success' : row.status === 'timeout' ? 'warning' : row.status === 'failed' ? 'danger' : 'info'" 
+                  :class="{'tag-running-vibrant': row.status === 'running'}">
                   {{ row.status?.toUpperCase() }}
                 </el-tag>
               </template>

@@ -13,14 +13,14 @@
     - background:radial-gradient 深色背景，和整体暗色主题一致
   -->
   <!-- @Ref: docs/sps/plans/20260527_ui_ux_refinement_plan.md | @Date: 2026-05-27 -->
-  <div style="display:flex;justify-content:center;align-items:center;height:100vh;background:linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)">
+  <div style="display:flex;justify-content:center;align-items:center;height:100vh;background:var(--bg-color)">
     <!--
       el-card：ElementPlus 的"卡片"组件，这里被磨砂玻璃化
       style="width:400px" 卡片宽度固定 400 像素
     -->
-    <el-card class="data-card" style="width:400px;padding:10px;">
+    <el-card class="data-card" style="width:440px;padding:24px;">
       <!-- 标题：Cronix Login，深色文字，居中显示 -->
-      <h2 style="text-align:center;margin-bottom:24px;color:var(--text-main)">Cronix Login</h2>
+      <h2 style="text-align:center;margin-bottom:32px;color:var(--text-main);font-size:24px;font-weight:600">Cronix Login</h2>
 
       <!--
         el-form：ElementPlus 的表单组件
@@ -41,7 +41,7 @@
               username 变量的值变化时，输入框里的内容也跟着变。
             placeholder="admin" 在输入框为空时显示提示文字 "admin"
           -->
-          <el-input v-model="username" placeholder="admin" data-testid="login-username" />
+          <el-input v-model="username" placeholder="admin" data-testid="login-username" size="large" />
         </el-form-item>
 
         <!-- 密码输入框表单项 -->
@@ -52,23 +52,21 @@
             @keyup.enter="handleLogin" 监听键盘事件：
               当用户在密码框里按下 Enter 键时，自动触发登录
           -->
-          <el-input v-model="password" type="password" show-password @keyup.enter="handleLogin" data-testid="login-password" />
+          <el-input v-model="password" type="password" show-password @keyup.enter="handleLogin" data-testid="login-password" size="large" />
         </el-form-item>
 
         <!-- 登录按钮表单项 -->
-        <el-form-item>
-          <!--
-            el-button：ElementPlus 的按钮组件
-            type="primary" 使用主题色（蓝色）作为按钮颜色
-            @click="handleLogin" 点击按钮时执行 handleLogin 函数
-            :loading="loading" 动态绑定 loading 状态：
-              当 loading 为 true 时，按钮显示加载动画并禁止点击（防止重复提交）
-            style="width:100%" 按钮宽度撑满整行
+        <div style="margin-top:32px;">
+          <!-- 
+            登录按钮：
+            type="primary" 是主要的蓝色按钮样式
+            native-type="submit" 让按钮触发刚才的 @submit 表单提交
+            style="width:100%" 让按钮铺满整个卡片宽度
           -->
-          <el-button type="primary" @click="handleLogin" :loading="loading" style="width:100%" data-testid="login-submit">
+          <el-button type="primary" native-type="submit" :loading="loading" style="width:100%" size="large" data-testid="login-submit">
             Sign In
           </el-button>
-        </el-form-item>
+        </div>
       </el-form>
 
       <!--
