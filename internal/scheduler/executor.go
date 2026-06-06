@@ -156,7 +156,7 @@ func (e *Executor) deleteOldestBatch(model interface{}, tableName string, maxRec
     }
 }
 
-// RunTaskNow 手动触发一个任务立即执行（包含依赖解析）
+// RunTaskNow 手动触发一个任务立即执行
 // 参数 taskID：要手动运行的任务ID
 func (e *Executor) RunTaskNow(taskID uint) {
     var task model.Task
@@ -168,61 +168,14 @@ func (e *Executor) RunTaskNow(taskID uint) {
 
     // 在后台线程中执行，不阻塞HTTP响应
     go func() {
-        // defer + recover 是Go的异常保护机制：如果发生了panic（程序崩溃），这里能兜底
         defer func() {
             if r := recover(); r != nil {                       // recover() 捕获panic
                 log.Error().Interface("panic", r).Uint("task_id", taskID).Msg("manual task panic")
             }
         }()
-
-        // 第一步：查询所有启用的任务，构建依赖图（DAG）
-        var tasks []model.Task
-        if err := e.db.Where("enabled = ?", true).Find(&tasks).Error; err != nil { // 查询失败
-            e.executeTask(taskID)                               // 退化为单独执行这个任务
-            return
-        }
-        dag := e.buildDAG(tasks)                                // 构建依赖图
-        layers := dag.TopologicalSort()                          // 拓扑排序：按依赖关系分层
-
-        // 第二步：找到触发任务在哪个层级
-        targetLayer := -1
-        for i, layer := range layers {                          // 遍历每一层
-            for _, nid := range layer {                         // 遍历这一层里的所有节点
-                if nid == taskID {                              // 找到了！
-                    targetLayer = i
-                    break
-                }
-            }
-            if targetLayer >= 0 {
-                break
-            }
-        }
-
-        // 如果任务不在图中（没有依赖关系），直接执行
-        if targetLayer < 0 {
-            e.executeTask(taskID)
-            return
-        }
-
-        // 第三步：从第0层开始，逐层执行到目标层
-        // 同一层里的任务可以同时执行（因为它们之间没有依赖关系）
-        for i := 0; i <= targetLayer; i++ {
-            var wg sync.WaitGroup                                // WaitGroup：等待一组任务完成
-            for _, nodeID := range layers[i] {                  // 遍历这一层的所有节点
-                wg.Add(1)                                       // 计数器+1，表示有一个任务要执行
-                nID := nodeID                                   // 复制变量，避免闭包引用循环变量的问题
-                e.pool.Submit(func() {                          // 把任务提交到线程池
-                    defer wg.Done()                             // 任务完成后，计数器-1
-                    defer func() {                              // 异常保护
-                        if r := recover(); r != nil {
-                            log.Error().Interface("panic", r).Uint("task_id", nID).Msg("task panic")
-                        }
-                    }()
-                    e.executeTask(nID)                          // 真正执行任务
-                })
-            }
-            wg.Wait()                                           // 等待这一层所有任务执行完，再进入下一层
-        }
+        
+        // 仅执行当前被触发的任务，不牵连其他任务
+        e.executeTask(taskID)
     }()
 }
 
