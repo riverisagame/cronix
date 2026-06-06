@@ -373,27 +373,113 @@ const refreshMetrics = async () => {
 
     // Throughput Chart (Bar Chart for Success vs Failed)
     throughputOption.value = {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      legend: { data: ['Success', 'Failed'], textStyle: { color: 'var(--text-main)' } },
+      tooltip: { 
+        trigger: 'axis', 
+        axisPointer: { type: 'shadow' },
+        backgroundColor: '#171717',
+        borderColor: '#3F3F46',
+        textStyle: { color: '#F4F4F5' },
+        padding: [12, 16]
+      },
+      legend: { data: ['Success', 'Failed'], textStyle: { color: '#D4D4D8' }, top: 0 },
       grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-      xAxis: { type: 'category', data: data.minute_labels, axisLabel: { color: 'var(--text-secondary)' } },
-      yAxis: { type: 'value', splitLine: { lineStyle: { color: 'var(--border-color)' } }, axisLabel: { color: 'var(--text-secondary)' } },
+      xAxis: { 
+        type: 'category', 
+        data: data.minute_labels, 
+        axisLabel: { color: '#A1A1AA' },
+        axisLine: { lineStyle: { color: '#3F3F46' } }
+      },
+      yAxis: { 
+        type: 'value', 
+        splitLine: { lineStyle: { color: '#3F3F46', type: 'dashed', opacity: 0.4 } }, 
+        axisLabel: { color: '#A1A1AA' } 
+      },
       series: [
-        { name: 'Success', type: 'bar', stack: 'total', data: data.minute_success, itemStyle: { color: 'var(--success-color)' } },
-        { name: 'Failed', type: 'bar', stack: 'total', data: data.minute_failed, itemStyle: { color: 'var(--error-color)' } }
+        { 
+          name: 'Success', 
+          type: 'bar', 
+          stack: 'total', 
+          data: data.minute_success, 
+          barMaxWidth: 32,
+          itemStyle: { 
+            color: '#10B981', // Emerald 500
+            borderRadius: [2, 2, 0, 0]
+          } 
+        },
+        { 
+          name: 'Failed', 
+          type: 'bar', 
+          stack: 'total', 
+          data: data.minute_failed, 
+          barMaxWidth: 32,
+          itemStyle: { 
+            color: '#EF4444', // Red 500
+            borderRadius: [2, 2, 0, 0]
+          } 
+        }
       ]
     }
 
     // Latency Chart (Line Chart for P95 and P99)
     latencyOption.value = {
-      tooltip: { trigger: 'axis' },
-      legend: { data: ['P95', 'P99'], textStyle: { color: 'var(--text-main)' } },
+      tooltip: { 
+        trigger: 'axis',
+        backgroundColor: '#171717',
+        borderColor: '#3F3F46',
+        textStyle: { color: '#F4F4F5' },
+        padding: [12, 16]
+      },
+      legend: { data: ['P95', 'P99'], textStyle: { color: '#D4D4D8' }, top: 0 },
       grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-      xAxis: { type: 'category', boundaryGap: false, data: data.minute_labels, axisLabel: { color: 'var(--text-secondary)' } },
-      yAxis: { type: 'value', name: 'ms', splitLine: { lineStyle: { color: 'var(--border-color)' } }, axisLabel: { color: 'var(--text-secondary)' }, nameTextStyle: { color: 'var(--text-secondary)' } },
+      xAxis: { 
+        type: 'category', 
+        boundaryGap: false, 
+        data: data.minute_labels, 
+        axisLabel: { color: '#A1A1AA' },
+        axisLine: { lineStyle: { color: '#3F3F46' } }
+      },
+      yAxis: { 
+        type: 'value', 
+        name: 'ms', 
+        splitLine: { lineStyle: { color: '#3F3F46', type: 'dashed', opacity: 0.4 } }, 
+        axisLabel: { color: '#A1A1AA' }, 
+        nameTextStyle: { color: '#A1A1AA', padding: [0, 25, 0, 0] } 
+      },
       series: [
-        { name: 'P95', type: 'line', smooth: true, data: data.minute_p95, itemStyle: { color: '#409EFF' }, areaStyle: { opacity: 0.1, color: '#409EFF' } },
-        { name: 'P99', type: 'line', smooth: true, data: data.minute_p99, itemStyle: { color: '#E6A23C' }, areaStyle: { opacity: 0.1, color: '#E6A23C' } }
+        { 
+          name: 'P95', 
+          type: 'line', 
+          smooth: 0.4, 
+          data: data.minute_p95, 
+          symbol: 'circle',
+          symbolSize: 6,
+          showSymbol: false,
+          itemStyle: { color: '#3B82F6' }, // Blue 500
+          lineStyle: { width: 3, color: '#3B82F6' },
+          areaStyle: { 
+            color: {
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [{ offset: 0, color: 'rgba(59, 130, 246, 0.4)' }, { offset: 1, color: 'rgba(59, 130, 246, 0.0)' }]
+            }
+          } 
+        },
+        { 
+          name: 'P99', 
+          type: 'line', 
+          smooth: 0.4, 
+          data: data.minute_p99, 
+          symbol: 'circle',
+          symbolSize: 6,
+          showSymbol: false,
+          itemStyle: { color: '#8B5CF6' }, // Violet 500
+          lineStyle: { width: 3, color: '#8B5CF6' },
+          areaStyle: { 
+            color: {
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [{ offset: 0, color: 'rgba(139, 92, 246, 0.4)' }, { offset: 1, color: 'rgba(139, 92, 246, 0.0)' }]
+            }
+          } 
+        }
       ]
     }
   } catch (e) {
