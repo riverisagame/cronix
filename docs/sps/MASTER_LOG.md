@@ -12,3 +12,4 @@
 | 2026-06-05 | Task-07 | 可观测性仪表盘 | docs/sps/plans/20260605_observability_dashboard_plan.md | ✅ 完成 |
 | 2026-06-05 | Task-08 | 前端专业稳定化UI优化 | docs/sps/plans/20260605_ui_ux_light_theme_plan.md | FINISH |
 | 2026-06-06 | Task-09 | 前端Bug修复(NaN) | N/A (Minor Fix) | FINISH |
+| 2026-06-06 | Task-10 | E2E测试修复及指标排查 | N/A (Minor Fix) | FINISH |
