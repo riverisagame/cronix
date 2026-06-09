@@ -456,9 +456,9 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		sysrunArgs = append(sysrunArgs, "--slice=cronix-tasks.slice")
 		sysrunArgs = append(sysrunArgs, cmdArgs...)
 
-		cmd = exec.CommandContext(tCtx, sysrunArgs[0], sysrunArgs[1:]...)
+		cmd = exec.Command(sysrunArgs[0], sysrunArgs[1:]...)
 	} else {
-		cmd = exec.CommandContext(tCtx, cmdArgs[0], cmdArgs[1:]...)
+		cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
 	}
 
 	if workDir != "" {
@@ -488,7 +488,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	if startErr = cmd.Start(); startErr != nil {
 		// --- 第一层降级：cgroups 启动失败 → 去掉 systemd-run 再试 ---
 		if cfg.Executor.EnableCGroups {
-			cmd = exec.CommandContext(tCtx, cmdArgs[0], cmdArgs[1:]...)
+			cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
 			if workDir != "" {
 				cmd.Dir = workDir
 			}
@@ -501,7 +501,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		// --- 第二层降级：sudo 启动失败 → 降级到检测到的 shell（不用 sudo -u） ---
 		if startErr != nil && len(cmdArgs) > 0 && cmdArgs[0] == "sudo" {
 			cmdArgs = []string{shellPath}
-			cmd = exec.CommandContext(tCtx, shellPath)
+			cmd = exec.Command(shellPath)
 			if workDir != "" {
 				cmd.Dir = workDir
 			}
