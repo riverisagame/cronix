@@ -26,8 +26,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -103,14 +103,14 @@ type TaskLogWriter struct {
 
 func NewTaskLogWriter(filePath string, maxSizeMB, maxBackups, maxAgeDays int) (*TaskLogWriter, error) {
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create log dir: %w", err)
 	}
 
 	// 执行一次过期的历史备份清理
 	cleanExpiredBackups(dir, filepath.Base(filePath), maxAgeDays)
 
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open log file: %w", err)
 	}
@@ -141,7 +141,7 @@ func (w *TaskLogWriter) Write(p []byte) (int, error) {
 		_ = w.file.Close()
 		if rErr := w.rotate(); rErr != nil {
 			// 如果滚动失败，尝试重新打开原文件以防写入中断
-			w.file, _ = os.OpenFile(w.filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			w.file, _ = os.OpenFile(w.filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 			return 0, fmt.Errorf("rotate log failed: %w", rErr)
 		}
 	}
@@ -184,7 +184,7 @@ func (w *TaskLogWriter) rotate() error {
 	}
 	defer srcFile.Close()
 
-	destFile, err := os.OpenFile(tempBackupPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	destFile, err := os.OpenFile(tempBackupPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("create dest for compression: %w", err)
 	}
@@ -199,7 +199,7 @@ func (w *TaskLogWriter) rotate() error {
 
 	// 3. 截断/清空原日志文件
 	srcFile.Close()
-	file, err := os.OpenFile(w.filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	file, err := os.OpenFile(w.filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("reopen truncated log file: %w", err)
 	}
@@ -247,7 +247,7 @@ func checkDiskSpaceLimit() error {
 	if cfg.Log.File != "" {
 		logDir = filepath.Dir(cfg.Log.File)
 	}
-	_ = os.MkdirAll(logDir, 0755)
+	_ = os.MkdirAll(logDir, 0o755)
 
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(logDir, &stat); err != nil {
@@ -281,10 +281,10 @@ func checkDiskSpaceLimit() error {
 
 // I/O 优先级相关的常量（定义在 linux/ioprio.h）
 const (
-	IOPRIO_CLASS_RT     = 1 // Realtime
-	IOPRIO_CLASS_BE     = 2 // Best-effort
-	IOPRIO_CLASS_IDLE   = 3 // Idle
-	IOPRIO_WHO_PROCESS  = 1
+	IOPRIO_CLASS_RT    = 1 // Realtime
+	IOPRIO_CLASS_BE    = 2 // Best-effort
+	IOPRIO_CLASS_IDLE  = 3 // Idle
+	IOPRIO_WHO_PROCESS = 1
 )
 
 // ioprio_set 系统调用号
@@ -349,7 +349,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	// 3. 构建 Nice/IONice 及用户身份包裹的底层指令
 	niceValue := cfg.Executor.NiceValue
 	ioNiceClass := cfg.Executor.IONiceClass
-	
+
 	var targetUser string
 	if runAs != "" {
 		targetUser = runAs
@@ -357,24 +357,29 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		targetUser = "root"
 	}
 
-	// 自动探测当前 Linux 环境是否支持免交互 sudo
-	hasSudo := true
-	if err := exec.Command("sudo", "-n", "true").Run(); err != nil {
-		hasSudo = false
-	}
-
-	// [sudo -u <User>] sh
-	// 用 Go 的 syscall.Setpriority + ionice syscall 替代外部 nice/ionice 命令，
-	// 避免 Alpine/Debian slim 等环境缺失这些二进制导致 fork/exec 失败。
-	// 将 command 通过 stdin 传入，避免 sudo 记录大段含换行的命令导致 syslog 混乱
+	// 判断当前进程身份，决定是否需要 sudo 切换用户
+	// root 执行自己 → 直接 sh，无需 sudo（避免 fork/exec /usr/bin/sudo 风险）
+	// root 切换到其他用户 → 用 sudo -u 切换
+	// 非 root 用户 → 探测 sudo 可用性后决定
 	var cmdArgs []string
-	if hasSudo {
-		cmdArgs = []string{
-			"sudo", "-u", targetUser, "sh",
-		}
+	currentUserIsRoot := os.Geteuid() == 0
+
+	if currentUserIsRoot && targetUser == "root" {
+		// 场景 A：root 执行自己的任务，无需 sudo
+		cmdArgs = []string{"sh"}
+	} else if currentUserIsRoot {
+		// 场景 B：root 需要切换到其他用户身份执行任务
+		cmdArgs = []string{"sudo", "-u", targetUser, "sh"}
 	} else {
-		cmdArgs = []string{
-			"sh",
+		// 场景 C：非 root 用户，探测 sudo 可用性
+		hasSudo := true
+		if err := exec.Command("sudo", "-n", "true").Run(); err != nil {
+			hasSudo = false
+		}
+		if hasSudo {
+			cmdArgs = []string{"sudo", "-u", targetUser, "sh"}
+		} else {
+			cmdArgs = []string{"sh"}
 		}
 	}
 
@@ -383,7 +388,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	if cfg.Executor.EnableCGroups {
 		memLimit := cfg.Executor.MemoryLimitMB
 		cpuQuota := cfg.Executor.CPUQuota
-		
+
 		sysrunArgs := []string{
 			"systemd-run", "--scope",
 			"-p", fmt.Sprintf("MemoryMax=%dM", memLimit),
@@ -402,9 +407,9 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
-	
+
 	cmd.Stdin = strings.NewReader(command)
-	
+
 	// 设置进程组属性以实现进程组强杀隔离
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
@@ -418,20 +423,35 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		return &ShellResult{Error: fmt.Errorf("stderr pipe: %w", err), ExitCode: -1}
 	}
 
-	// 6. 启动外部命令
+	// 6. 启动外部命令（支持双层降级回退：cgroups -> sudo）
 	var startErr error
 	if startErr = cmd.Start(); startErr != nil {
-		// 健壮回退：如果是由于 systemd-run 权限/环境缺失导致的失败，尝试不带 systemd-run 重新启动
+		// --- 第一层降级：cgroups 启动失败 → 去掉 systemd-run 再试 ---
 		if cfg.Executor.EnableCGroups {
 			cmd = exec.CommandContext(tCtx, cmdArgs[0], cmdArgs[1:]...)
 			if workDir != "" {
 				cmd.Dir = workDir
 			}
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+			cmd.Stdin = strings.NewReader(command)
 			stdoutPipe, _ = cmd.StdoutPipe()
 			stderrPipe, _ = cmd.StderrPipe()
 			startErr = cmd.Start()
 		}
+		// --- 第二层降级：sudo 启动失败 → 降级到直接 sh（不用 sudo -u） ---
+		if startErr != nil && len(cmdArgs) > 0 && cmdArgs[0] == "sudo" {
+			cmdArgs = []string{"sh"}
+			cmd = exec.CommandContext(tCtx, "sh")
+			if workDir != "" {
+				cmd.Dir = workDir
+			}
+			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+			cmd.Stdin = strings.NewReader(command)
+			stdoutPipe, _ = cmd.StdoutPipe()
+			stderrPipe, _ = cmd.StderrPipe()
+			startErr = cmd.Start()
+		}
+		// 所有降级均失败，返回最终错误
 		if startErr != nil {
 			return &ShellResult{Error: startErr, ExitCode: -1}
 		}
@@ -473,10 +493,10 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		for scanner.Scan() {
 			lineBytes := scanner.Bytes()
 			lineBytes = append(lineBytes, '\n')
-			
+
 			// 写入磁盘 TaskLogWriter (可能会触发磁盘熔断)
 			_, dErr := diskWriter.Write(lineBytes)
-			
+
 			// 写入内存缓冲区
 			var mWriter io.Writer = memBuffer
 			if dErr != nil {

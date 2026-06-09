@@ -11,6 +11,8 @@ ExecStart=/opt/cronix/cronix serve -c /opt/cronix/config.yaml
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5
+LimitNOFILE=65536
+TimeoutStopSec=30
 
 # 日志 → journald
 StandardOutput=journal
