@@ -467,8 +467,11 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 
 	cmd.Stdin = strings.NewReader(command)
 
-	// 设置进程组属性以实现进程组强杀隔离
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// 进程组设置在 exec 之后由父进程调用 syscall.Setpgid 完成，
+	// 不在 SysProcAttr 中设置 Setpgid=true，避免子进程在 execve 之前
+	// 调用 setpgid(0,0) 改变进程上下文，导致 OpenCloudOS 的
+	// fapolicyd/seccomp 基于新进程组应用不同规则拦截 execve。
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
 
 	// 5. 准备流式日志 Reader
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -489,7 +492,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 			if workDir != "" {
 				cmd.Dir = workDir
 			}
-			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
 			cmd.Stdin = strings.NewReader(command)
 			stdoutPipe, _ = cmd.StdoutPipe()
 			stderrPipe, _ = cmd.StderrPipe()
@@ -502,7 +505,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 			if workDir != "" {
 				cmd.Dir = workDir
 			}
-			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
 			cmd.Stdin = strings.NewReader(command)
 			stdoutPipe, _ = cmd.StdoutPipe()
 			stderrPipe, _ = cmd.StderrPipe()
@@ -514,10 +517,18 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		}
 	}
 
-	// 6b. 进程启动后，用 syscall 直接设置 CPU 优先级（nice）和 I/O 优先级（ionice），
-	//     不依赖外部 nice/ionice 命令，兼容 Alpine/Debian slim 等精简环境。
+	// 6b. 进程启动后，在父进程中设置进程组、CPU优先级和I/O优先级
+	//     不在 SysProcAttr 中设 Setpgid 是为了避免子进程在 execve 之前
+	//     调用 setpgid 改变安全上下文（OpenCloudOS fapolicyd 问题）。
 	if cmd.Process != nil {
 		pid := cmd.Process.Pid
+
+		// 父进程设置子进程的进程组（替代 SysProcAttr.Setpgid）
+		// 让子进程归入独立进程组，方便后续 Kill(-pid) 整体强杀
+		if err := syscall.Setpgid(pid, pid); err != nil {
+			// 非致命：设置失败仅警告，不影响任务执行
+			fmt.Fprintf(os.Stderr, "[Warning] setpgid(%d,%d) failed: %v\n", pid, pid, err)
+		}
 
 		// 设置 CPU 调度优先级（nice 值）
 		// syscall.Setpriority(which, who, niceval) 的 niceval 范围 -20~19
