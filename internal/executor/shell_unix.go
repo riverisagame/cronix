@@ -309,6 +309,52 @@ func setIONice(pid int, class int) error {
 }
 
 // ============================================================
+// 4a. getShellPath / probeShell: 探测系统中真实可用的 shell 路径
+//
+//	os.Stat 判断文件存在性不够——在 OpenCloudOS 等环境上，
+//	seccomp/fapolicyd 等安全框架可能基于调用上下文选择性拦截 execve，
+//	导致 stat 通过但 exec 失败（返回 ENOENT 作为欺骗）。
+//	因此实际执行 `sh -c true` 来验证 execve 链路完整可用。
+//	每次 ExecuteShell 都重新探测，避免安全策略异步加载导致的缓存过时。
+//
+// ============================================================
+// getShellPath 探测系统中当前可用的 shell 路径。
+// 每次调用都重新探测，避免 sync.Once 缓存过时——在 OpenCloudOS 等环境上，
+// 安全策略可能异步加载，导致进程启动时的探测结果在后续执行中失效。
+// 每次实际 exec 前都做一次 `sh -c true` 验证，捕捉 seccomp/fapolicyd 的拦截变化。
+func getShellPath() string {
+	return probeShell()
+}
+
+// probeShell 遍历候选 shell 路径，实际执行一次命令验证 exec 可正常完成。
+func probeShell() string {
+	candidates := []string{
+		"/bin/sh",
+		"/bin/bash",
+		"/bin/dash",
+		"/usr/bin/bash",
+		"/usr/bin/dash",
+	}
+	for _, p := range candidates {
+		// 先做快速 stat 过滤掉明显不存在的路径
+		fi, err := os.Stat(p)
+		if err != nil || !fi.Mode().IsRegular() || fi.Mode()&0o111 == 0 {
+			continue
+		}
+		// 实际执行 sh -c true 完整走一遍 fork+exec+wait 链路
+		// 在 OpenCloudOS 上，exec 可能被安全框架拦截，stat 无法发现
+		cmd := exec.Command(p, "-c", "true")
+		if err := cmd.Run(); err == nil {
+			return p
+		}
+	}
+	// 兜底：让 Go 的 PATH 查找决定
+	if path, err := exec.LookPath("sh"); err == nil {
+		return path
+	}
+	return "/bin/sh"
+}
+
 // 4. ExecuteShell: 带硬隔离、调度优先级和流式日志的主执行器
 // ============================================================
 
@@ -318,9 +364,18 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		cfg = &config.Config{}
 	}
 
-	// 1. 创建独立的超时上下文（基于传入的 ctx，支持外部取消信号传导）
+	// 1. 创建独立的超时/取消上下文
+	//    Daemon 任务可能 timeoutSec=0（常驻进程不设超时），
+	//    context.WithTimeout(ctx, 0) 会立即过期导致 cmd.Start() 返回 deadline exceeded。
+	//    因此 timeoutSec<=0 时改用 WithCancel（仅响应外部取消，无超时）。
 	// @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
-	tCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+	var tCtx context.Context
+	var cancel context.CancelFunc
+	if timeoutSec > 0 {
+		tCtx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+	} else {
+		tCtx, cancel = context.WithCancel(ctx)
+	}
 	defer cancel()
 
 	// 2. 准备执行日志路径并初始化 TaskLogWriter
@@ -361,15 +416,17 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	// root 执行自己 → 直接 sh，无需 sudo（避免 fork/exec /usr/bin/sudo 风险）
 	// root 切换到其他用户 → 用 sudo -u 切换
 	// 非 root 用户 → 探测 sudo 可用性后决定
+
 	var cmdArgs []string
 	currentUserIsRoot := os.Geteuid() == 0
+	shellPath := getShellPath()
 
 	if currentUserIsRoot && targetUser == "root" {
-		// 场景 A：root 执行自己的任务，无需 sudo
-		cmdArgs = []string{"sh"}
+		// 场景 A：root 执行自己的任务，无需 sudo，直接用检测到的 shell
+		cmdArgs = []string{shellPath}
 	} else if currentUserIsRoot {
 		// 场景 B：root 需要切换到其他用户身份执行任务
-		cmdArgs = []string{"sudo", "-u", targetUser, "sh"}
+		cmdArgs = []string{"sudo", "-u", targetUser, shellPath}
 	} else {
 		// 场景 C：非 root 用户，探测 sudo 可用性
 		hasSudo := true
@@ -377,9 +434,9 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 			hasSudo = false
 		}
 		if hasSudo {
-			cmdArgs = []string{"sudo", "-u", targetUser, "sh"}
+			cmdArgs = []string{"sudo", "-u", targetUser, shellPath}
 		} else {
-			cmdArgs = []string{"sh"}
+			cmdArgs = []string{shellPath}
 		}
 	}
 
@@ -438,10 +495,10 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 			stderrPipe, _ = cmd.StderrPipe()
 			startErr = cmd.Start()
 		}
-		// --- 第二层降级：sudo 启动失败 → 降级到直接 sh（不用 sudo -u） ---
+		// --- 第二层降级：sudo 启动失败 → 降级到检测到的 shell（不用 sudo -u） ---
 		if startErr != nil && len(cmdArgs) > 0 && cmdArgs[0] == "sudo" {
-			cmdArgs = []string{"sh"}
-			cmd = exec.CommandContext(tCtx, "sh")
+			cmdArgs = []string{shellPath}
+			cmd = exec.CommandContext(tCtx, shellPath)
 			if workDir != "" {
 				cmd.Dir = workDir
 			}
