@@ -47,6 +47,7 @@ import (
     "cronix/internal/config"   // 配置管理：读写 config.yaml 配置文件
     "cronix/internal/database" // 数据库管理：打开/关闭数据库，建表
     "cronix/internal/handler"  // HTTP 请求处理器：接收网页请求并返回数据
+    "cronix/internal/notify"   // 通知发送器：Webhook/Email 通知
     "cronix/internal/router"   // 路由设置：定义"哪个 URL 地址访问哪个页面"
     "cronix/internal/scheduler" // 调度引擎：管理所有任务什么时候该跑
     "cronix/internal/service"  // 业务逻辑层：处理任务和日志的实际操作
@@ -285,6 +286,13 @@ func runServe(cmd *cobra.Command, args []string) {
 
     // 注入 Invalidator 接口，打破循环引用
     exec.CacheInvalidator = execSvc // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
+
+    // --- 初始化通知发送器并注入 Executor ---
+    // @Ref: architect_review_20260609.md P1-3 | @Date: 2026-06-09
+    notifier := notify.New(cfg.Notify.Retry, cfg.Notify.RetryInterval)
+    go notifier.Start(ctx)
+    exec.Notifier = notifier
+    log.Info().Int("retry", cfg.Notify.Retry).Msg("通知发送器已启动")
 
     groupSvc := &service.GroupService{DB: database.DB, Engine: engine, ExecSvc: execSvc} // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
 

@@ -63,6 +63,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
     // 第三步：登录频率限制检查（防止有人用程序暴力猜密码）
     loginMu.Lock()                          // 加锁，确保同时只有一个请求能修改loginAttempts
+    // 顺带清理超过 2 个窗口期的过期条目，防止 map 无限增长
+    // @Ref: architect_review_20260609.md P0-2 | @Date: 2026-06-09
+    now := time.Now()
+    for ip, w := range loginAttempts {
+        if now.Sub(w.firstSeen) > loginWindowDuration*2 {
+            delete(loginAttempts, ip)
+        }
+    }
     w, exists := loginAttempts[clientIP]    // 查一下这个IP之前有没有登录过
     if !exists || time.Since(w.firstSeen) > loginWindowDuration { // 两种情况：第一次登录，或者距离首次登录已经超过1分钟
         loginAttempts[clientIP] = &loginWindow{count: 1, firstSeen: time.Now()} // 重置记录：次数为1，首次时间为现在

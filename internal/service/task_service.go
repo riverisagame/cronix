@@ -150,21 +150,30 @@ func (s *TaskService) UpdateTask(id uint, updates map[string]interface{}) error 
 }
 
 // DeleteTask 删除任务及其所有关联数据（依赖关系、通知配置、执行日志）
+// @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-06-09
 func (s *TaskService) DeleteTask(id uint) error {
 	// 第一步：确认任务存在
 	var task model.Task
 	if err := s.DB.First(&task, id).Error; err != nil {
 		return err
 	}
-	// 第二步：删除关联数据（GORM的级联删除，先删子表再删主表）
-	s.DB.Where("task_id = ?", id).Delete(&model.TaskDep{})       // 删除依赖关系
-	s.DB.Where("task_id = ?", id).Delete(&model.NotifyConfig{})   // 删除通知配置
-	s.DB.Where("task_id = ?", id).Delete(&model.ExecutionLog{})   // 删除执行日志
-	// 第三步：删除任务本身
-	if err := s.DB.Delete(&task).Error; err != nil {
+	// 第二步：用事务原子地删除关联数据和任务本身
+	// 若任何一步失败，整体回滚，防止孤儿数据（残留的依赖/日志/通知配置）
+	if err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("task_id = ?", id).Delete(&model.TaskDep{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("task_id = ?", id).Delete(&model.NotifyConfig{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("task_id = ?", id).Delete(&model.ExecutionLog{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&task).Error
+	}); err != nil {
 		return err
 	}
-	// 第四步：通知调度器安全移除，并失效缓存
+	// 第三步：事务成功后通知调度器移除，并失效缓存
 	s.Engine.RemoveTaskSchedule(id) // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
 	if s.ExecSvc != nil {
 		s.ExecSvc.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27

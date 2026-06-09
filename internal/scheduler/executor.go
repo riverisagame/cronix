@@ -15,6 +15,7 @@ import (
 	"cronix/internal/config"   // 配置模块
 	"cronix/internal/executor"  // 执行模块：实际执行shell、HTTP、清理等任务
 	"cronix/internal/model"     // 数据模型
+	"cronix/internal/notify"    // 通知模块：Webhook/Email通知发送
 
 	"github.com/panjf2000/ants/v2"   // ants：高性能的goroutine池（线程池）
 	"github.com/rs/zerolog/log"      // zerolog：结构化日志库
@@ -36,6 +37,8 @@ type Executor struct {
 	cfg              *config.Config         // 系统配置：线程池大小、输出截断大小等
 	engine           *Engine                // 调度引擎：从这里接收"该执行任务了"的信号
 	CacheInvalidator StatsCacheInvalidator // 缓存失效接口
+	Notifier         *notify.Notifier       // 通知发送器：Webhook/Email通知（可选，为 nil 时不发通知）
+	// @Ref: architect_review_20260609.md P1-3 | @Date: 2026-06-09
 	logWriteCounter  uint64                 // 原子计数器：控制全局日志主动清理的时机
 }
 
@@ -418,6 +421,7 @@ func truncate(s string, maxKB int) string {
 }
 
 // notifyTaskResult 根据任务执行结果发送通知
+// @Ref: architect_review_20260609.md P1-3 | @Date: 2026-06-09
 func (e *Executor) notifyTaskResult(task *model.Task, execLog *model.ExecutionLog) {
     var notifies []model.NotifyConfig                            // 查询这个任务的所有通知配置
     e.db.Where("task_id = ?", task.ID).Find(&notifies)
@@ -425,9 +429,25 @@ func (e *Executor) notifyTaskResult(task *model.Task, execLog *model.ExecutionLo
         // 判断是否需要通知：成功且配置了成功通知，或者失败且配置了失败通知
         shouldNotify := (execLog.Status == "success" && n.OnSuccess) ||
             (execLog.Status == "failed" && n.OnFailure)
-        if shouldNotify {
-            log.Info().Str("task", task.Name).Str("type", n.NotifyType).Msg("would notify")
-            // 注意：当前版本只在日志中记录"会通知"，实际通知功能见notify模块
+        if !shouldNotify {
+            continue
+        }
+        if e.Notifier != nil {
+            // 真正发送通知事件（非阵塞）
+            // 用 select+default 防止 channel 满时阻塞执行链
+            event := notify.NotifyEvent{
+                TaskName: task.Name,
+                Status:   execLog.Status,
+                Config:   n,
+            }
+            select {
+            case e.Notifier.NotifyChan() <- event:
+                log.Debug().Str("task", task.Name).Str("type", n.NotifyType).Msg("通知事件已入队")
+            default:
+                log.Warn().Str("task", task.Name).Str("type", n.NotifyType).Msg("通知队列已满，本条通知被丢弃")
+            }
+        } else {
+            log.Info().Str("task", task.Name).Str("type", n.NotifyType).Msg("通知器未配置，跳过通知")
         }
     }
 }

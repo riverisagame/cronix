@@ -97,6 +97,11 @@ func (m *MetricsRegistry) Stop() {
 	m.mu.Unlock()
 }
 
+// maxDurationSamples 每个时间桶最多保留的耗时采样数
+// 防止高频任务场景下 Durations slice 无界增长导致内存泄漏
+// @Ref: architect_review_20260609.md P1-5 | @Date: 2026-06-09
+const maxDurationSamples = 1000
+
 func (m *MetricsRegistry) processEvents() {
 	for {
 		select {
@@ -115,7 +120,10 @@ func (m *MetricsRegistry) processEvents() {
 			} else {
 				m.minuteBuckets[minKey].Failed++
 			}
-			m.minuteBuckets[minKey].Durations = append(m.minuteBuckets[minKey].Durations, ev.DurationMs)
+			// 限制每桶采样数，防止高频场景下无界增长
+			if len(m.minuteBuckets[minKey].Durations) < maxDurationSamples {
+				m.minuteBuckets[minKey].Durations = append(m.minuteBuckets[minKey].Durations, ev.DurationMs)
+			}
 
 			if _, ok := m.hourBuckets[hourKey]; !ok {
 				m.hourBuckets[hourKey] = &MetricBucket{Timestamp: ev.Time}
@@ -125,8 +133,11 @@ func (m *MetricsRegistry) processEvents() {
 			} else {
 				m.hourBuckets[hourKey].Failed++
 			}
-			m.hourBuckets[hourKey].Durations = append(m.hourBuckets[hourKey].Durations, ev.DurationMs)
-			
+			// 限制每桶采样数，防止高频场景下无界增长
+			if len(m.hourBuckets[hourKey].Durations) < maxDurationSamples {
+				m.hourBuckets[hourKey].Durations = append(m.hourBuckets[hourKey].Durations, ev.DurationMs)
+			}
+
 			m.mu.Unlock()
 		}
 	}
