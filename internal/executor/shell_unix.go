@@ -275,6 +275,40 @@ func checkDiskSpaceLimit() error {
 }
 
 // ============================================================
+// 3b. setIONice: 用 syscall 设置进程 I/O 调度优先级
+//     不依赖外部 ionice 命令，兼容 Alpine/Debian slim 等精简环境
+// ============================================================
+
+// I/O 优先级相关的常量（定义在 linux/ioprio.h）
+const (
+	IOPRIO_CLASS_RT     = 1 // Realtime
+	IOPRIO_CLASS_BE     = 2 // Best-effort
+	IOPRIO_CLASS_IDLE   = 3 // Idle
+	IOPRIO_WHO_PROCESS  = 1
+)
+
+// ioprio_set 系统调用号
+// 在 x86_64 上是 251，在 arm64 上是 30
+// 使用 syscall.SYS_IOPRIO_SET 使其跨架构
+func setIONice(pid int, class int) error {
+	if class <= 0 || class > 3 {
+		return nil // class=0 表示不设置
+	}
+
+	// 计算 ioprio 值：
+	// 高 3 位是 class，低 13 位是 priority level（优先级数据，0 最高）
+	// ioprio = (class << 13) | priority
+	// 使用 class 的最低 3 位和 priority=0（最高优先级）
+	classBits := (class & 0x7) << 13
+
+	_, _, err := syscall.Syscall(syscall.SYS_IOPRIO_SET, IOPRIO_WHO_PROCESS, uintptr(pid), uintptr(classBits))
+	if err != 0 && err != syscall.EINVAL {
+		return err
+	}
+	return nil
+}
+
+// ============================================================
 // 4. ExecuteShell: 带硬隔离、调度优先级和流式日志的主执行器
 // ============================================================
 
@@ -329,19 +363,17 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		hasSudo = false
 	}
 
-	// nice -n <Nice> ionice -c <Class> [sudo -u <User>] sh
+	// [sudo -u <User>] sh
+	// 用 Go 的 syscall.Setpriority + ionice syscall 替代外部 nice/ionice 命令，
+	// 避免 Alpine/Debian slim 等环境缺失这些二进制导致 fork/exec 失败。
 	// 将 command 通过 stdin 传入，避免 sudo 记录大段含换行的命令导致 syslog 混乱
 	var cmdArgs []string
 	if hasSudo {
 		cmdArgs = []string{
-			"nice", "-n", fmt.Sprintf("%d", niceValue),
-			"ionice", "-c", fmt.Sprintf("%d", ioNiceClass),
 			"sudo", "-u", targetUser, "sh",
 		}
 	} else {
 		cmdArgs = []string{
-			"nice", "-n", fmt.Sprintf("%d", niceValue),
-			"ionice", "-c", fmt.Sprintf("%d", ioNiceClass),
 			"sh",
 		}
 	}
@@ -402,6 +434,25 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		}
 		if startErr != nil {
 			return &ShellResult{Error: startErr, ExitCode: -1}
+		}
+	}
+
+	// 6b. 进程启动后，用 syscall 直接设置 CPU 优先级（nice）和 I/O 优先级（ionice），
+	//     不依赖外部 nice/ionice 命令，兼容 Alpine/Debian slim 等精简环境。
+	if cmd.Process != nil {
+		pid := cmd.Process.Pid
+
+		// 设置 CPU 调度优先级（nice 值）
+		// syscall.Setpriority(which, who, niceval) 的 niceval 范围 -20~19
+		if err := syscall.Setpriority(syscall.PRIO_PROCESS, pid, niceValue); err != nil {
+			// 非致命：nice 设置失败时仅警告，不阻断执行
+			fmt.Fprintf(os.Stderr, "[Warning] setpriority(PRIO_PROCESS,%d,%d) failed: %v\n", pid, niceValue, err)
+		}
+
+		// 设置 I/O 调度优先级（ionice）
+		if err := setIONice(pid, ioNiceClass); err != nil {
+			// 非致命：ionice 设置失败时仅警告，不阻断执行
+			fmt.Fprintf(os.Stderr, "[Warning] set ionice(pid=%d,class=%d) failed: %v\n", pid, ioNiceClass, err)
 		}
 	}
 
