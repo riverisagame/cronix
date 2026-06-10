@@ -470,6 +470,14 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	}
 
 	if workDir != "" {
+		// 手动验证工作目录是否存在，防止在 Go 1.18 及以下版本中由于目录不存在
+		// 导致产生非常迷惑的 "fork/exec /bin/sh: no such file or directory" 报错。
+		if fi, err := os.Stat(workDir); err != nil || !fi.IsDir() {
+			return &ShellResult{
+				Error:    fmt.Errorf("working directory invalid: %s (error: %v)", workDir, err),
+				ExitCode: -1,
+			}
+		}
 		cmd.Dir = workDir
 	}
 
