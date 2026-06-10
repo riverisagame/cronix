@@ -5,6 +5,7 @@ import "time"
 // TaskGroup represents a logical group of tasks with a shared execution mode.
 // mode="parallel" — all tasks run concurrently (same DAG layer).
 // mode="sequential" — tasks run one by one in sort_order.
+// mode="dag" — tasks run layer by layer based on dependency graph.
 type TaskGroup struct {
     ID          uint      `gorm:"primaryKey" json:"id"`
     Name        string    `gorm:"uniqueIndex;not null" json:"name"`

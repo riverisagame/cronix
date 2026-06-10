@@ -18,3 +18,4 @@
 | 2026-06-10 | Task-12 | executor/scheduler | docs/sps/plans/20260610_execution_engine_optimization.md | FINISH |
 | 2026-06-10 | ARCH-01 | global | docs/sps/decisions/20260610_architectural_review.md | COMPLETED |
 | 2026-06-10 | Task-13 | executor | docs/sps/plans/20260610_architect_remediation.md | COMPLETED |
+| 2026-06-10 | Task-14 | scheduler | docs/sps/plans/20260610_dag_execution_engine.md | COMPLETED |

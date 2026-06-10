@@ -520,7 +520,49 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
             }
         }
         log.Info().Str("group", g.Name).Msg("group (sequential) completed")
-    }
+        	case "dag":
+		dag := e.buildDAG(members)
+		layers := dag.TopologicalSort()
+		layerFailed := false
+
+		for i, layer := range layers {
+			if layerFailed {
+				log.Warn().Str("group", g.Name).Int("layer", i).Msg("group (dag) stopped due to previous layer failure")
+				break
+			}
+			
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+			for _, taskID := range layer {
+				wg.Add(1)
+				tid := taskID
+				e.pool.Submit(func() {
+					defer wg.Done()
+					defer func() {
+						if r := recover(); r != nil {
+							log.Error().Interface("panic", r).Uint("task_id", tid).Msg("group (dag) task panic")
+						}
+					}()
+					
+					e.executeTask(tid)
+					var lastLog model.ExecutionLog
+					e.db.Where("task_id = ?", tid).Order("id DESC").First(&lastLog)
+					
+					mu.Lock()
+					if lastLog.Status == "success" {
+						success++
+					} else {
+						failed++
+						errMsg = lastLog.ErrorMsg
+						layerFailed = true
+					}
+					mu.Unlock()
+				})
+			}
+			wg.Wait()
+		}
+		log.Info().Str("group", g.Name).Msg("group (dag) completed")
+	}
 
     // Update group execution log
     endTime := time.Now()

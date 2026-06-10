@@ -23,7 +23,7 @@ func setupExecutorTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	db.AutoMigrate(&model.Task{}, &model.ExecutionLog{}, &model.GroupExecutionLog{}, &model.NotifyConfig{})
+	db.AutoMigrate(&model.Task{}, &model.ExecutionLog{}, &model.GroupExecutionLog{}, &model.NotifyConfig{}, &model.TaskGroup{}, &model.TaskDep{})
 	t.Cleanup(func() {
 		sqlDB, _ := db.DB()
 		if sqlDB != nil {
