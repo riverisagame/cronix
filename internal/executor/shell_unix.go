@@ -336,13 +336,14 @@ func getShellPath() string {
 	return cachedShellPath
 }
 
-// probeShell 遍历候选 shell 路径，实际执行一次命令验证 exec 可正常完成。
+// probeShell 遍历候选 shell 路径，使用 Stat 快速验证以避免在受限环境（如 fapolicyd）被拦截导致误判
 func probeShell() string {
 	candidates := []string{
-		"/bin/sh",
 		"/bin/bash",
-		"/bin/dash",
 		"/usr/bin/bash",
+		"/bin/sh",
+		"/usr/bin/sh",
+		"/bin/dash",
 		"/usr/bin/dash",
 	}
 	for _, p := range candidates {
@@ -351,12 +352,9 @@ func probeShell() string {
 		if err != nil || !fi.Mode().IsRegular() || fi.Mode()&0o111 == 0 {
 			continue
 		}
-		// 实际执行 sh -c true 完整走一遍 fork+exec+wait 链路
-		// 在 OpenCloudOS 上，exec 可能被安全框架拦截，stat 无法发现
-		cmd := exec.Command(p, "-c", "true")
-		if err := cmd.Run(); err == nil {
-			return p
-		}
+		// 只要存在且有执行权限，就直接返回该路径。
+		// 在 OpenCloudOS 等带有安全限制的环境中，执行 echo/true 可能会失败。
+		return p
 	}
 	// 兜底：让 Go 的 PATH 查找决定
 	if path, err := exec.LookPath("sh"); err == nil {
