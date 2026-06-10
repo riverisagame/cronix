@@ -318,12 +318,22 @@ func setIONice(pid int, class int) error {
 //	每次 ExecuteShell 都重新探测，避免安全策略异步加载导致的缓存过时。
 //
 // ============================================================
-// getShellPath 探测系统中当前可用的 shell 路径。
-// 每次调用都重新探测，避免 sync.Once 缓存过时——在 OpenCloudOS 等环境上，
-// 安全策略可能异步加载，导致进程启动时的探测结果在后续执行中失效。
-// 每次实际 exec 前都做一次 `sh -c true` 验证，捕捉 seccomp/fapolicyd 的拦截变化。
+var (
+	cachedShellPath string
+	shellPathOnce   sync.Once
+)
+
+// getShellPath 探测系统中当前可用的 shell 路径并缓存。
+// 由于探测过程涉及大量 fork+exec+wait，如果在紧凑循环（Tight Loop）中频繁调用，
+// 极易导致文件描述符或进程数耗尽，进而触发 `fork/exec: resource temporarily unavailable` 错误。
+// 此前为了防御 OpenCloudOS 安全策略异步加载而放弃了缓存，
+// 但在遇到快速退出的 daemon 任务时，这种激进探测会放大系统的资源压力导致级联崩溃。
+// 现在恢复全局缓存，对于安全框架异步加载导致权限变更的边角场景，由任务本身的失败退避机制来处理。
 func getShellPath() string {
-	return probeShell()
+	shellPathOnce.Do(func() {
+		cachedShellPath = probeShell()
+	})
+	return cachedShellPath
 }
 
 // probeShell 遍历候选 shell 路径，实际执行一次命令验证 exec 可正常完成。

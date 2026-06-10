@@ -218,6 +218,15 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		// 累加连续失败计数（成功执行后归零）
 		if exitSuccess {
 			restartCount = 0
+			// 为防止成功但快速退出的任务导致死循环（Tight Loop）耗尽系统资源（引发 fork/exec EAGAIN），
+			// 成功退出时也强制加入 1 秒的基础退避。
+			select {
+			case <-ctx.Done():
+				m.setStatus(taskID, "STOPPED", "")
+				log.Info().Uint("task_id", taskID).Msg("daemon monitor: 成功退出后退避期间收到停止信号，退出守护")
+				return
+			case <-time.After(1 * time.Second):
+			}
 		} else {
 			restartCount++
 			lastErr := ""
