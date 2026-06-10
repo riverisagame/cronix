@@ -261,7 +261,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			}
 			m.mu.Unlock()
 
-			log.Warn().Uint("task_id", taskID).Dur("backoff", backoff).Int("attempt", restartCount).
+			log.Warn().Uint("task_id", taskID).Str("error", lastErr).Dur("backoff", backoff).Int("attempt", restartCount).
 				Msg("daemon monitor: 执行失败，进入退避等待")
 
 			// 退避等待，同时响应 ctx 取消以支持即时终止
