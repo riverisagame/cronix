@@ -227,7 +227,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			m.setStatus(taskID, "BACKOFF", lastErr)
 
 			// 检查是否超过最大重启次数 -> FATAL 熔断
-			if restartCount >= maxAttempts {
+			if restartPolicy != "always" && restartCount >= maxAttempts {
 				m.mu.Lock()
 				if st, ok := m.states[taskID]; ok {
 					st.Status = "FATAL"

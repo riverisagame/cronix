@@ -13,3 +13,6 @@
 | 2026-06-05 | Task-08 | 前端专业稳定化UI优化 | docs/sps/plans/20260605_ui_ux_light_theme_plan.md | FINISH |
 | 2026-06-06 | Task-09 | 前端Bug修复(NaN) | N/A (Minor Fix) | FINISH |
 | 2026-06-06 | Task-10 | E2E测试修复及指标排查 | N/A (Minor Fix) | FINISH |
+| 2026-06-09 | Task-11 | executor | docs/sps/plans/20260609_executor_nice_fallback_plan.md | [SCAN] |
+
+| 2026-06-10 | FIX-DAEMON | scheduler | docs/sps/logs/20260610_daemon_fix_acceptance.md | COMPLETED |

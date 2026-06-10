@@ -494,8 +494,14 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 			}
 			cmd.SysProcAttr = &syscall.SysProcAttr{}
 			cmd.Stdin = strings.NewReader(command)
-			stdoutPipe, _ = cmd.StdoutPipe()
-			stderrPipe, _ = cmd.StderrPipe()
+			stdoutPipe, err = cmd.StdoutPipe()
+			if err != nil {
+				return &ShellResult{Error: fmt.Errorf("fallback cgroup stdout pipe: %w", err), ExitCode: -1}
+			}
+			stderrPipe, err = cmd.StderrPipe()
+			if err != nil {
+				return &ShellResult{Error: fmt.Errorf("fallback cgroup stderr pipe: %w", err), ExitCode: -1}
+			}
 			startErr = cmd.Start()
 		}
 		// --- 第二层降级：sudo 启动失败 → 降级到检测到的 shell（不用 sudo -u） ---
@@ -507,8 +513,14 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 			}
 			cmd.SysProcAttr = &syscall.SysProcAttr{}
 			cmd.Stdin = strings.NewReader(command)
-			stdoutPipe, _ = cmd.StdoutPipe()
-			stderrPipe, _ = cmd.StderrPipe()
+			stdoutPipe, err = cmd.StdoutPipe()
+			if err != nil {
+				return &ShellResult{Error: fmt.Errorf("fallback sudo stdout pipe: %w", err), ExitCode: -1}
+			}
+			stderrPipe, err = cmd.StderrPipe()
+			if err != nil {
+				return &ShellResult{Error: fmt.Errorf("fallback sudo stderr pipe: %w", err), ExitCode: -1}
+			}
 			startErr = cmd.Start()
 		}
 		// 所有降级均失败，返回最终错误
