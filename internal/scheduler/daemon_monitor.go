@@ -250,9 +250,13 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			}
 
 			// 指数退避延迟：1s -> 2s -> 4s -> 8s -> ... 最大 60s
-			backoff := time.Duration(1<<uint(restartCount-1)) * time.Second
-			if backoff > 60*time.Second {
+			// 防止大 restartCount 导致位移溢出变成 0 (Go 位移溢出特性)
+			var backoff time.Duration
+			if restartCount >= 7 {
+				// 1 << 6 已经是 64s，超过上限，直接锁定在最大 60s
 				backoff = 60 * time.Second
+			} else {
+				backoff = time.Duration(1<<uint(restartCount-1)) * time.Second
 			}
 
 			m.mu.Lock()
