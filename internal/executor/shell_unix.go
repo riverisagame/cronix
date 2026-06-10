@@ -481,12 +481,20 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		cmd.Dir = workDir
 	}
 
-	cmd.Stdin = strings.NewReader(command)
+	wrappedCommand := fmt.Sprintf(`set -m
+(
+%s
+) &
+child=$!
+trap 'kill -9 -$child 2>/dev/null; exit 143' TERM
+wait $child
+exit $?
+`, command)
 
-	// 进程组设置在 exec 之后由父进程调用 syscall.Setpgid 完成，
-	// 不在 SysProcAttr 中设置 Setpgid=true，避免子进程在 execve 之前
-	// 调用 setpgid(0,0) 改变进程上下文，导致 OpenCloudOS 的
-	// fapolicyd/seccomp 基于新进程组应用不同规则拦截 execve。
+	cmd.Stdin = strings.NewReader(wrappedCommand)
+
+	// 移除在父进程执行 syscall.Setpgid(pid, pid) 的逻辑
+	// 因为 bash wrapper 中 set -m 已经自动将子任务放入独立进程组。
 	// 加入 Pdeathsig = syscall.SIGKILL，确保父进程意外死亡时子进程一并被内核收割。
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Pdeathsig: syscall.SIGKILL,
@@ -516,7 +524,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 			cmd.SysProcAttr = &syscall.SysProcAttr{
 				Pdeathsig: syscall.SIGKILL,
 			}
-			cmd.Stdin = strings.NewReader(command)
+			cmd.Stdin = strings.NewReader(wrappedCommand)
 			stdoutPipe, err = cmd.StdoutPipe()
 			if err != nil {
 				return &ShellResult{Error: fmt.Errorf("fallback cgroup stdout pipe: %w", err), ExitCode: -1}
@@ -540,7 +548,7 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 			cmd.SysProcAttr = &syscall.SysProcAttr{
 				Pdeathsig: syscall.SIGKILL,
 			}
-			cmd.Stdin = strings.NewReader(command)
+			cmd.Stdin = strings.NewReader(wrappedCommand)
 			stdoutPipe, err = cmd.StdoutPipe()
 			if err != nil {
 				return &ShellResult{Error: fmt.Errorf("fallback sudo stdout pipe: %w", err), ExitCode: -1}
@@ -560,18 +568,9 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 		}
 	}
 
-	// 6b. 进程启动后，在父进程中设置进程组、CPU优先级和I/O优先级
-	//     不在 SysProcAttr 中设 Setpgid 是为了避免子进程在 execve 之前
-	//     调用 setpgid 改变安全上下文（OpenCloudOS fapolicyd 问题）。
+	// 6b. 进程启动后，设置CPU优先级和I/O优先级
 	if cmd.Process != nil {
 		pid := cmd.Process.Pid
-
-		// 父进程设置子进程的进程组（替代 SysProcAttr.Setpgid）
-		// 让子进程归入独立进程组，方便后续 Kill(-pid) 整体强杀
-		if err := syscall.Setpgid(pid, pid); err != nil {
-			// 非致命：设置失败仅警告，不影响任务执行
-			fmt.Fprintf(os.Stderr, "[Warning] setpgid(%d,%d) failed: %v\n", pid, pid, err)
-		}
 
 		// 设置 CPU 调度优先级（nice 值）
 		// syscall.Setpriority(which, who, niceval) 的 niceval 范围 -20~19
@@ -632,7 +631,14 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	select {
 	case <-tCtx.Done():
 		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			// 发送 SIGTERM 给 Bash Wrapper，触发其 trap 'kill -9 -$child' 清理底层进程树
+			_ = syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
+			
+			// 防御性兜底：1秒后强制杀死 bash 本身
+			go func(p *os.Process) {
+				time.Sleep(1 * time.Second)
+				_ = p.Kill()
+			}(cmd.Process)
 		}
 		<-done
 		runErr = tCtx.Err()
