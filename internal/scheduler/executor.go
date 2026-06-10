@@ -184,15 +184,21 @@ func (e *Executor) RunTaskNow(taskID uint) {
 
 // handleTrigger 处理定时器触发的任务
 func (e *Executor) handleTrigger(taskID uint) {
-    // 仅执行当前被定时器触发的任务，不再全量扫表牵连无关任务
-    go func() {
-        defer func() {
-            if r := recover(); r != nil {
-                log.Error().Interface("panic", r).Uint("task_id", taskID).Msg("cron task panic")
-            }
-        }()
-        e.executeTask(taskID)
-    }()
+	// 外层轻量级协程排队，避免阻塞 Run 内部 select
+	go func() {
+		// 提交给 ants.Pool 执行，利用线程池封顶并发防击穿
+		err := e.pool.Submit(func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Error().Interface("panic", r).Uint("task_id", taskID).Msg("cron task panic")
+				}
+			}()
+			e.executeTask(taskID)
+		})
+		if err != nil {
+			log.Error().Err(err).Uint("task_id", taskID).Msg("Failed to submit task to pool (pool exhausted)")
+		}
+	}()
 }
 
 // buildDAG 根据数据库中的任务和依赖关系构建依赖图
@@ -392,9 +398,11 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
 
 	e.db.Save(execLog)                                           // 把执行结果保存到数据库
     
-    // 执行单任务数据库日志限额清理
+    // 异步执行单任务数据库日志限额清理，绝不阻塞当前 Worker 归还给线程池
     if execLog.TaskID != nil && e.cfg.Log.MaxLogsPerTask > 0 {
-        e.limitTaskLogs(*execLog.TaskID, e.cfg.Log.MaxLogsPerTask)
+        taskIDToClean := *execLog.TaskID
+        maxLogs := e.cfg.Log.MaxLogsPerTask
+        go e.limitTaskLogs(taskIDToClean, maxLogs)
     }
 
     // 原子计数器递增，每 500 次写入异步触发一次全局日志清理

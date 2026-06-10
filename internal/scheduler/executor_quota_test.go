@@ -92,6 +92,10 @@ func TestExecutor_TaskLevelQuota(t *testing.T) {
 	// 结果：该任务的日志数应该被截断并限制为最多 10 条。
 	executor.executeTask(task.ID)
 
+	// 因为 limitTaskLogs 现在是完全异步的（脱离了 executeTask 的主路径），
+	// 这里给后台 goroutine 留一点时间完成数据库清理操作。
+	time.Sleep(200 * time.Millisecond)
+
 	var count int64
 	db.Model(&model.ExecutionLog{}).Where("task_id = ?", task.ID).Count(&count)
 
