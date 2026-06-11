@@ -335,15 +335,21 @@
         
         <!-- Live Console Tab -->
         <el-tab-pane label="Live Console" name="live" style="height: 100%; display: flex; flex-direction: column;">
-          <div class="terminal-header">
-            <div class="terminal-status">
+          <div ref="fullscreenWrapperRef" class="fullscreen-wrapper" style="height: 100%; display: flex; flex-direction: column; background: var(--el-bg-color);">
+            <div class="terminal-header">
+              <div class="terminal-status">
               <span class="status-dot" :class="liveStatus.toLowerCase()"></span>
               <span class="status-text">{{ liveStatus }}</span>
+              <span class="status-time" v-if="liveStatus === 'RUNNING'" style="margin-left: 12px; font-size: 12px; color: #a8b2c1; font-family: var(--font-mono)">Elapsed: {{ liveDurationFormatted }}</span>
             </div>
             
             <el-input v-model="liveSearch" placeholder="Search logs..." class="terminal-search" clearable size="small" data-testid="live-search">
               <template #prefix><el-icon><Search /></el-icon></template>
             </el-input>
+
+            <el-button size="small" type="primary" plain @click="toggleFullscreen" data-testid="btn-fullscreen">
+              <el-icon><FullScreen /></el-icon> Fullscreen
+            </el-button>
 
             <el-popconfirm title="Are you sure to kill this task?" confirm-button-type="danger" @confirm="killLiveTask" :disabled="liveStatus !== 'RUNNING'">
               <template #reference>
@@ -368,6 +374,7 @@
               Resume auto-scroll
             </div>
           </div>
+          </div>
         </el-tab-pane>
 
         <!-- Execution History Tab -->
@@ -384,6 +391,15 @@
                   <el-tag :type="log.status==='success'?'success':'danger'" effect="dark" size="small">{{ log.status?.toUpperCase() }}</el-tag>
                   <el-tag size="small" type="info" effect="plain">{{ log.trigger_type }}</el-tag>
                   <span v-if="log.exit_code!==null" style="font-size:12px;color:var(--el-text-color-secondary);font-family:var(--font-mono)">{{ log.start_time?.substring(11,19) }}</span>
+                  <span style="font-size:12px;color:var(--el-text-color-secondary);margin-left:10px;font-family:var(--font-mono)" v-if="log.end_time">Duration: {{ calculateDuration(log.start_time, log.end_time) }}</span>
+                  <div style="margin-left:auto; display:flex; gap:8px;">
+                    <el-button size="small" text type="primary" @click.stop="downloadLog(log)"><el-icon><Download /></el-icon></el-button>
+                    <el-popconfirm title="Delete this log?" @confirm="deleteLogRecord(log.id)">
+                      <template #reference>
+                        <el-button size="small" text type="danger" @click.stop><el-icon><Delete /></el-icon></el-button>
+                      </template>
+                    </el-popconfirm>
+                  </div>
                 </div>
                 <pre v-if="log.output" style="background:#f5f7fa;color:#303133;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;margin:0">{{ log.output }}</pre>
                 <pre v-if="log.error_msg" style="background:#fef0f0;color:#F56C6C;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:0;margin-top:8px">{{ log.error_msg }}</pre>
@@ -406,9 +422,9 @@ import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 // 导入路由工具
 import { useRouter } from 'vue-router'
 // 导入任务 API 函数
-import { taskAPI, daemonAPI } from '../api/index'
+import { taskAPI, daemonAPI, logAPI } from '../api/index'
 // 导入图标组件
-import { Plus, Search, Refresh, VideoPlay, VideoPause, Delete, Edit, Tickets } from '@element-plus/icons-vue'
+import { Plus, Search, Refresh, VideoPlay, VideoPause, Delete, Edit, Tickets, FullScreen, Download } from '@element-plus/icons-vue'
 // ElMessage 是 ElementPlus 的消息提示工具（用来在页面上方弹出"操作成功"等提示）
 import { ElMessage } from 'element-plus'
 
@@ -653,6 +669,61 @@ const historyPage = ref(1)
 const historyTotal = ref(0)
 const historyTaskId = ref<number | null>(null)
 
+// @Ref: docs/sps/plans/20260611_task_20_log_enhancements.md | @Date: 2026-06-11
+const fullscreenWrapperRef = ref<HTMLElement | null>(null)
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    fullscreenWrapperRef.value?.requestFullscreen().catch(err => {
+      ElMessage.warning(`Error attempting to enable fullscreen: ${err.message}`)
+    })
+  } else {
+    document.exitFullscreen()
+  }
+}
+
+const liveStartTime = ref(0)
+const liveDuration = ref(0)
+const liveDurationFormatted = computed(() => {
+  const totalSeconds = liveDuration.value
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+})
+
+const calculateDuration = (start: string, end: string) => {
+  if (!start || !end) return ''
+  const ms = new Date(end).getTime() - new Date(start).getTime()
+  if (ms < 0) return ''
+  const s = Math.floor(ms / 1000)
+  const m = Math.floor(s / 60)
+  if (m > 0) return `${m}m ${s % 60}s`
+  return `${ms / 1000}s`
+}
+
+const downloadLog = (log: any) => {
+  const content = log.output || log.error_msg || ''
+  const blob = new Blob([content], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `task_${log.task_id}_log_${log.id}.txt`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+const deleteLogRecord = async (logId: number) => {
+  try {
+    await logAPI.deleteLog(logId)
+    ElMessage.success('Log deleted successfully')
+    const idx = taskLogs.value.findIndex(l => l.id === logId)
+    if (idx !== -1) taskLogs.value.splice(idx, 1)
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.message || 'Failed to delete log')
+  }
+}
+
 // @Ref: docs/sps/decisions/20260611_ui_ux_log_terminal.md | @Date: 2026-06-11
 // Live Streaming State
 const activeTab = ref('history')
@@ -718,15 +789,22 @@ const onDrawerClose = () => {
 const startLiveStream = async (id: number) => {
   liveLogs.value = ''
   liveStatus.value = 'RUNNING'
+  liveStartTime.value = Date.now()
+  liveDuration.value = 0
   clearLiveStream()
   
   const fetchLogs = async () => {
     try {
+      liveDuration.value = Math.floor((Date.now() - liveStartTime.value) / 1000)
       const res: any = await taskAPI.streamLog(id)
-      liveLogs.value = res.data.data.output || ''
-      if (res.data.data.status !== 'running') {
-        liveStatus.value = 'STOPPED'
+      liveLogs.value = typeof res.data === 'string' ? res.data : (res.data?.data?.output || '')
+      
+      const logRes: any = await taskAPI.getLogs(id, { page: 1, page_size: 1 })
+      const latestLog = logRes?.data?.data?.items?.[0]
+      if (latestLog && latestLog.status !== 'running') {
+        liveStatus.value = latestLog.status === 'success' ? 'STOPPED' : latestLog.status.toUpperCase()
         clearLiveStream()
+        loadHistory()
       }
     } catch(e) {
       liveStatus.value = 'ERROR'
