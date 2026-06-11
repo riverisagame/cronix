@@ -208,7 +208,7 @@
         </el-table-column>
       </el-table>
 
-      <el-empty v-else description="您还没有创建任何任务，点击右上方 [New Task] 开始吧！">
+      <el-empty v-if="tasks.length === 0" description="您还没有创建任何任务，点击右上方 [New Task] 开始吧！">
         <el-button type="primary" @click="router.push('/tasks/new')">New Task</el-button>
       </el-empty>
     </template>
