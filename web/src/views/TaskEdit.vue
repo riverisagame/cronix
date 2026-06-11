@@ -204,6 +204,18 @@
         </template>
 
         <!--
+          ======== 报警与通知配置 ========
+        -->
+        <el-divider content-position="left">Alert & Notification</el-divider>
+        <el-form-item label="Webhook URL">
+          <el-input v-model="notifyForm.webhook_url" placeholder="https://..." clearable />
+        </el-form-item>
+        <el-form-item label="Notify On">
+          <el-checkbox v-model="notifyForm.on_failure" label="Failure" />
+          <el-checkbox v-model="notifyForm.on_success" label="Success" />
+        </el-form-item>
+
+        <!--
           ======== 高级设置（所有类型通用） ========
         -->
         <el-divider content-position="left">Advanced</el-divider>
@@ -309,6 +321,7 @@ const saving = ref(false)
  *   description: 任务描述（空）
  */
 const form = ref<any>({ name:'', run_mode:'cron', restart_policy:'always', max_restart_attempts:10, cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'root', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+const notifyForm = ref<any>({ webhook_url: '', on_failure: true, on_success: false })
 const groupList = ref<any[]>([])
 const availableDepTasks = ref<any[]>([])
 
@@ -507,6 +520,17 @@ onMounted(async () => {
         const deps = dr.data.data || []
         form.value.dep_ids = deps.map((dep: any) => dep.depends_on_id || dep.id)
       } catch { /* deps load failed, ignore */ }
+      // Load notify config
+      try {
+        const nr = await taskAPI.getNotify(Number(route.params.id))
+        if (nr.data.data && nr.data.data.id) {
+          notifyForm.value = {
+            webhook_url: nr.data.data.webhook_url || '',
+            on_failure: nr.data.data.on_failure,
+            on_success: nr.data.data.on_success
+          }
+        }
+      } catch { /* ignore */ }
     }
     catch {
       ElMessage.error('Load failed')
@@ -538,12 +562,16 @@ async function save() {
       if (dep_ids && dep_ids.length > 0) {
         await taskAPI.updateDeps(newId, dep_ids)
       }
+      // Save notify
+      await taskAPI.updateNotify(newId, notifyForm.value)
       ElMessage.success('Created')
     } else {
       // 编辑模式：把 :id 参数转成数字，调用更新 API
       await taskAPI.update(Number(route.params.id), taskData)
       // Save dependencies
       await taskAPI.updateDeps(Number(route.params.id), dep_ids || [])
+      // Save notify
+      await taskAPI.updateNotify(Number(route.params.id), notifyForm.value)
       ElMessage.success('Saved')
     }
     // 保存成功，返回任务列表页

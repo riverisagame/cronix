@@ -273,6 +273,32 @@ func (h *TaskHandler) UpdateTaskDeps(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})    // 更新成功
 }
 
+// GetTaskNotify 获取通知配置
+func (h *TaskHandler) GetTaskNotify(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	cfg, err := h.TaskSvc.GetTaskNotify(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": cfg})
+}
+
+// UpdateTaskNotify 更新通知配置
+func (h *TaskHandler) UpdateTaskNotify(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	var cfg model.NotifyConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+		return
+	}
+	if err := h.TaskSvc.UpdateTaskNotify(uint(id), &cfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": cfg})
+}
+
 // ================================================================
 // 常驻守护进程 (Daemon / Supervisor) 管理 API
 // @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05

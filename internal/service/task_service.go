@@ -214,3 +214,29 @@ func (s *TaskService) UpdateTaskDeps(taskID uint, depIDs []uint) error {
 	}
 	return nil
 }
+
+// GetTaskNotify 获取任务的通知配置
+func (s *TaskService) GetTaskNotify(taskID uint) (*model.NotifyConfig, error) {
+	var cfg model.NotifyConfig
+	// 使用 FirstOrCreate 或者查询，如果没有就返回空结构体而不是报错
+	err := s.DB.Where("task_id = ?", taskID).First(&cfg).Error
+	if err != nil {
+		// 返回一个空的但不报错
+		return &model.NotifyConfig{TaskID: taskID}, nil
+	}
+	return &cfg, nil
+}
+
+// UpdateTaskNotify 更新任务的通知配置
+func (s *TaskService) UpdateTaskNotify(taskID uint, cfg *model.NotifyConfig) error {
+	cfg.TaskID = taskID // 确保绑定的TaskID是URL里的ID
+	// 先尝试查询是否存在
+	var exist model.NotifyConfig
+	if err := s.DB.Where("task_id = ?", taskID).First(&exist).Error; err != nil {
+		// 不存在则创建
+		return s.DB.Create(cfg).Error
+	}
+	// 存在则更新
+	cfg.ID = exist.ID // 保留原主键
+	return s.DB.Save(cfg).Error
+}

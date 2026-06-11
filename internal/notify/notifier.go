@@ -17,7 +17,8 @@ import (
 
     "cronix/internal/model"   // 数据模型：通知配置
 
-    "github.com/rs/zerolog/log" // 日志库
+    	"github.com/panjf2000/ants/v2"
+	"github.com/rs/zerolog/log" // 日志库
 )
 
 // NotifyEvent 表示一条待发送的通知事件
@@ -32,16 +33,19 @@ type Notifier struct {
     notifyCh chan NotifyEvent   // 通知事件通道：其他地方把事件发到这里
     retry    int                // 发送失败时的重试次数
     interval time.Duration      // 重试间隔时长
+    pool     *ants.Pool         // 协程池，防止高并发时阻塞或者导致 OOM
 }
 
 // New 创建一个新的通知发送器
 // 参数 retry：发送失败时最多重试几次
 // 参数 interval：每次重试之间等多久
 func New(retry int, interval time.Duration) *Notifier {
+    pool, _ := ants.NewPool(50) // 容量50，最大并发发50个通知
     return &Notifier{
         notifyCh: make(chan NotifyEvent, 256),                   // 缓冲区256，可以暂存256个待发送的通知
         retry:    retry,                                          // 重试次数
         interval: interval,                                       // 重试间隔
+        pool:     pool,                                           // 绑定协程池
     }
 }
 
@@ -57,9 +61,10 @@ func (n *Notifier) Start(ctx context.Context) {
     for {                                                        // 无限循环，不断从通道读取事件
         select {
         case <-ctx.Done():                                       // 上下文被取消（程序要关闭了）
+            n.pool.Release()                                     // 释放协程池
             return                                               // 停止循环
         case event := <-n.notifyCh:                              // 收到一个通知事件
-            n.send(event)                                        // 发送它
+            n.pool.Submit(func() { n.send(event) })              // 放入协程池异步发送
         }
     }
 }

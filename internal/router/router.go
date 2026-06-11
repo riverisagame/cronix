@@ -67,6 +67,8 @@ func SetupRouter(
         api.GET("/tasks/:id/logs", taskH.GetTaskLogs)          // 查询任务执行日志
         api.GET("/tasks/:id/deps", taskH.GetTaskDeps)          // 查询任务依赖关系
         api.PUT("/tasks/:id/deps", taskH.UpdateTaskDeps)       // 更新任务依赖关系
+        api.GET("/tasks/:id/notify", taskH.GetTaskNotify)      // 获取任务通知配置
+        api.PUT("/tasks/:id/notify", taskH.UpdateTaskNotify)   // 更新任务通知配置
 
         // ---- 常驻守护进程管理 ----
         // @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05

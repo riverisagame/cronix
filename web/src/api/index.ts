@@ -104,7 +104,11 @@ export const taskAPI = {
   // @Ref: docs/sps/plans/20260605_daemon_frontend_plan.md | @Date: 2026-06-05
   startDaemon(id: number) { return api.post('/tasks/' + id + '/daemon/start') },
   stopDaemon(id: number) { return api.post('/tasks/' + id + '/daemon/stop') },
-  getDaemonStatus(id: number) { return api.get('/tasks/' + id + '/daemon/status') }
+  getDaemonStatus(id: number) { return api.get('/tasks/' + id + '/daemon/status') },
+
+  // Notification Config API
+  getNotify(id: number) { return api.get('/tasks/' + id + '/notify') },
+  updateNotify(id: number, data: any) { return api.put('/tasks/' + id + '/notify', data) }
 }
 
 /**
