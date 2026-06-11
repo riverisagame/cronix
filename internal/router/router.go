@@ -64,6 +64,8 @@ func SetupRouter(
         api.PUT("/tasks/:id", taskH.UpdateTask)                // 更新任务
         api.DELETE("/tasks/:id", taskH.DeleteTask)             // 删除任务
         api.POST("/tasks/:id/run", taskH.RunTask)              // 手动触发任务执行
+        api.POST("/tasks/:id/kill", taskH.KillTask)            // 手动强杀任务
+        api.GET("/tasks/:id/stream", taskH.StreamTaskLog)      // 流式读取执行日志
         api.GET("/tasks/:id/logs", taskH.GetTaskLogs)          // 查询任务执行日志
         api.GET("/tasks/:id/deps", taskH.GetTaskDeps)          // 查询任务依赖关系
         api.PUT("/tasks/:id/deps", taskH.UpdateTaskDeps)       // 更新任务依赖关系

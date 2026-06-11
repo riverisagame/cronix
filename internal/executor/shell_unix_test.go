@@ -37,7 +37,7 @@ func TestExecuteShell_LinuxLimits(t *testing.T) {
 	cmdStr := "echo 'hello world'; echo 'line 2'; echo 'line 3'"
 	
 	// 在后台会写入到自定义的 TaskLogDir
-	expectedLogFile := filepath.Join(taskLogDir, "task_999.log")
+	expectedLogFile := filepath.Join(taskLogDir, "exec_999.log")
 	// 确保执行前清理掉历史测试干扰
 	_ = os.Remove(expectedLogFile)
 

@@ -34,6 +34,8 @@ import (
 	"cronix/internal/config"
 )
 
+var RunningTaskCancels sync.Map
+
 // ShellResult 存放Shell命令执行结果
 type ShellResult struct {
 	Output   string // 内存中保存的截断后输出内容
@@ -386,12 +388,23 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 	}
 	defer cancel()
 
+	if taskID > 0 {
+		RunningTaskCancels.Store(taskID, cancel)
+		defer RunningTaskCancels.Delete(taskID)
+	}
+
 	// 2. 准备执行日志路径并初始化 TaskLogWriter
 	var logFilePath string
+	logDir := cfg.Log.TaskLogDir
+	if logDir == "" {
+		logDir = filepath.Join("data", "logs")
+	}
+	os.MkdirAll(logDir, 0755)
+
 	if taskID > 0 {
-		logFilePath = filepath.Join(cfg.Log.TaskLogDir, fmt.Sprintf("task_%d.log", taskID))
+		logFilePath = filepath.Join(logDir, fmt.Sprintf("exec_%d.log", taskID))
 	} else {
-		logFilePath = filepath.Join(cfg.Log.TaskLogDir, "adhoc.log")
+		logFilePath = filepath.Join(logDir, "exec_adhoc.log")
 	}
 
 	var diskWriter io.Writer
@@ -669,4 +682,13 @@ exit $?
 
 	result.ExitCode = 0
 	return result
+}
+
+// CancelExecution 尝试手动强杀指定的正在运行的执行进程
+func CancelExecution(taskID uint) bool {
+	if cancel, ok := RunningTaskCancels.Load(taskID); ok {
+		cancel.(context.CancelFunc)()
+		return true
+	}
+	return false
 }

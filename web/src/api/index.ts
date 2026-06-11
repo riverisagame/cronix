@@ -108,7 +108,12 @@ export const taskAPI = {
 
   // Notification Config API
   getNotify(id: number) { return api.get('/tasks/' + id + '/notify') },
-  updateNotify(id: number, data: any) { return api.put('/tasks/' + id + '/notify', data) }
+  updateNotify(id: number, data: any) { return api.put('/tasks/' + id + '/notify', data) },
+
+  // @Ref: docs/sps/decisions/20260611_ui_ux_log_terminal.md | @Date: 2026-06-11
+  // Live Execution Control
+  kill(id: number) { return api.post('/tasks/' + id + '/kill') },
+  streamLog(id: number, params?: any) { return api.get('/tasks/' + id + '/stream', { params }) }
 }
 
 /**

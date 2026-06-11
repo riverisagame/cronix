@@ -8,9 +8,16 @@ package executor
 import (
     "bytes"       // 字节缓冲区：用来收集命令的输出
     "context"     // 上下文：带超时的执行控制
+    "fmt"
+    "io"
+    "os"
     "os/exec"     // 执行外部命令：调用系统的命令行
+    "path/filepath"
+    "sync"
     "time"        // 时间：用于超时计算
 )
+
+var RunningTaskCancels sync.Map
 
 // ShellResult 存放Shell命令执行后的结果
 // 这个结构体在shell_windows.go和shell_unix.go中都定义了（条件编译）
@@ -33,6 +40,11 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
     tCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
     defer cancel()                                              // 函数结束时取消上下文，释放资源
 
+    if taskID > 0 {
+        RunningTaskCancels.Store(taskID, cancel)
+        defer RunningTaskCancels.Delete(taskID)
+    }
+
     // 第二步：创建命令对象
     // 在Windows上，使用 cmd.exe 来执行命令，/c 参数表示"执行完就退出"
     cmd := exec.CommandContext(tCtx, "cmd", "/c", command)      // CommandContext会在线程退出时自动终止命令
@@ -42,8 +54,23 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
 
     // 第三步：准备输出缓冲区（标准输出和标准错误）
     var stdout, stderr bytes.Buffer                             // Buffer就像一个能自动扩容的字符串容器
-    cmd.Stdout = &stdout                                        // 把标准输出重定向到stdout缓冲区
-    cmd.Stderr = &stderr                                        // 把标准错误重定向到stderr缓冲区
+    
+    var logFile *os.File
+    if taskID > 0 {
+        logDir := filepath.Join("data", "logs")
+        os.MkdirAll(logDir, 0755)
+        logPath := filepath.Join(logDir, fmt.Sprintf("exec_%d.log", taskID))
+        logFile, _ = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+    }
+
+    if logFile != nil {
+        defer logFile.Close()
+        cmd.Stdout = io.MultiWriter(&stdout, logFile)
+        cmd.Stderr = io.MultiWriter(&stderr, logFile)
+    } else {
+        cmd.Stdout = &stdout
+        cmd.Stderr = &stderr
+    }
 
     // 第四步：运行命令（阻塞等待，直到命令结束或超时）
     err := cmd.Run()
@@ -76,4 +103,13 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
     // 第七步：命令执行成功
     result.ExitCode = 0                                         // 退出码为0表示一切正常
     return result
+}
+
+// CancelExecution 尝试手动强杀指定的正在运行的执行进程
+func CancelExecution(taskID uint) bool {
+    if cancel, ok := RunningTaskCancels.Load(taskID); ok {
+        cancel.(context.CancelFunc)()
+        return true
+    }
+    return false
 }

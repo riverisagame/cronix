@@ -329,70 +329,80 @@
     <!--
       el-drawer：侧边抽屉组件（从右侧滑出的面板）
       v-model="drawerVisible" 绑定显示/隐藏状态
-      :title="'History: '+logTaskName" 动态标题（显示任务名称）
-      size="700px" 抽屉宽度 700 像素
-      direction="rtl" 从右侧滑出（Right To Left）
     -->
-    <el-drawer v-model="drawerVisible" :title="'History: '+logTaskName" size="80%" direction="rtl">
-      <!--
-        如果该任务的执行日志为空，显示提示信息
-      -->
-      <div v-if="taskLogs.length===0" style="text-align:center;padding:40px;color:var(--text-secondary)">
-        <p>No executions yet</p>
-      </div>
-
-      <!--
-        时间线组件（el-timeline）：按时间顺序展示执行历史
-        v-for="log in taskLogs" 循环渲染每条日志
-        :key="log.id" 给每条数据一个唯一标识（Vue 用来优化渲染性能）
-        :timestamp="log.start_time" 时间线节点旁边显示的时间
-        placement="top" 时间标签显示在节点上方
-        :color 动态设置节点颜色：成功绿色，失败红色，其他橙色
-      -->
-      <el-timeline v-else>
-        <el-timeline-item v-for="log in taskLogs" :key="log.id" :timestamp="log.start_time" placement="top"
-          :color="log.status==='success'?'#67C23A':log.status==='failed'?'#F56C6C':'#E6A23C'">
-          <!-- 每条日志用卡片包裹 -->
-          <el-card shadow="hover" style="cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-            <!-- 标签行：状态标签 + 触发方式标签 + 退出码 -->
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <!-- 状态标签：成功绿色、失败红色 -->
-              <el-tag :type="log.status==='success'?'success':'danger'" effect="dark" size="small">{{ log.status?.toUpperCase() }}</el-tag>
-              <!-- 触发方式标签：灰色信息标签 -->
-              <el-tag size="small" type="info" effect="plain">{{ log.trigger_type }}</el-tag>
-              <!--
-                退出码（exit_code）：程序运行结束时的返回值，0 表示正常，非 0 表示异常
-                v-if="log.exit_code!==null" 如果退出码不为 null 才显示
-                !== null 表示"有值就显示"，null 代表还没有结束（任务还在运行中）
-              -->
-              <span v-if="log.exit_code!==null" style="font-size:12px;color:var(--el-text-color-secondary);font-family:var(--font-mono)">{{ log.start_time?.substring(11,19) }}</span>
+    <el-drawer v-model="drawerVisible" :title="logTaskName" size="80%" direction="rtl" @close="onDrawerClose">
+      <el-tabs v-model="activeTab" class="drawer-tabs" style="height: 100%; display: flex; flex-direction: column;">
+        
+        <!-- Live Console Tab -->
+        <el-tab-pane label="Live Console" name="live" style="height: 100%; display: flex; flex-direction: column;">
+          <div class="terminal-header">
+            <div class="terminal-status">
+              <span class="status-dot" :class="liveStatus.toLowerCase()"></span>
+              <span class="status-text">{{ liveStatus }}</span>
             </div>
-            <!--
-              程序输出内容（pre 标签保留原始格式，包括空格和换行）
-              背景浅灰，深色文字，圆角边框
-              white-space:pre-wrap 保留换行和空格，但允许自动换行
-              word-break:break-all 长单词/长字符串自动截断换行（防止撑破容器）
-              max-height:200px 最高 200px，超过出现滚动条
-            -->
-            <pre v-if="log.output" style="background:#f5f7fa;color:#303133;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;margin:0">{{ log.output }}</pre>
-            <!--
-              错误信息（如果存在）
-              背景浅红色，红色文字，样式和输出内容类似但颜色不同，以示区分
-            -->
-            <pre v-if="log.error_msg" style="background:#fef0f0;color:#F56C6C;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:0;margin-top:8px">{{ log.error_msg }}</pre>
-          </el-card>
-        </el-timeline-item>
-      </el-timeline>
-      <div v-if="taskLogs.length > 0" style="margin-top:16px;text-align:right">
-        <el-pagination v-model:current-page="historyPage" :total="historyTotal" :page-size="10" layout="total,prev,pager,next" @current-change="loadHistory" />
-      </div>
+            
+            <el-input v-model="liveSearch" placeholder="Search logs..." class="terminal-search" clearable size="small" data-testid="live-search">
+              <template #prefix><el-icon><Search /></el-icon></template>
+            </el-input>
+
+            <el-popconfirm title="Are you sure to kill this task?" confirm-button-type="danger" @confirm="killLiveTask" :disabled="liveStatus !== 'RUNNING'">
+              <template #reference>
+                <el-button type="danger" size="small" :disabled="liveStatus !== 'RUNNING'" data-testid="btn-kill-task">
+                  <el-icon><VideoPause /></el-icon> Kill Task
+                </el-button>
+              </template>
+            </el-popconfirm>
+          </div>
+
+          <div 
+            class="terminal-body" 
+            ref="liveTerminalRef" 
+            @scroll="handleLiveScroll"
+          >
+            <!-- 渲染高亮 HTML，如果没有输入则直接展示内容 -->
+            <pre v-if="liveLogs" class="terminal-content" v-html="highlightedLogs"></pre>
+            <div v-else class="terminal-empty">Waiting for execution logs...</div>
+            
+            <!-- Auto-scroll indicator/button -->
+            <div class="scroll-resume-btn" v-show="!liveAutoScroll" @click="resumeAutoScroll">
+              Resume auto-scroll
+            </div>
+          </div>
+        </el-tab-pane>
+
+        <!-- Execution History Tab -->
+        <el-tab-pane label="Execution History" name="history">
+          <div v-if="taskLogs.length===0" style="text-align:center;padding:40px;color:var(--text-secondary)">
+            <p>No executions yet</p>
+          </div>
+
+          <el-timeline v-else style="padding: 16px;">
+            <el-timeline-item v-for="log in taskLogs" :key="log.id" :timestamp="log.start_time" placement="top"
+              :color="log.status==='success'?'#67C23A':log.status==='failed'?'#F56C6C':'#E6A23C'">
+              <el-card shadow="hover" style="cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                  <el-tag :type="log.status==='success'?'success':'danger'" effect="dark" size="small">{{ log.status?.toUpperCase() }}</el-tag>
+                  <el-tag size="small" type="info" effect="plain">{{ log.trigger_type }}</el-tag>
+                  <span v-if="log.exit_code!==null" style="font-size:12px;color:var(--el-text-color-secondary);font-family:var(--font-mono)">{{ log.start_time?.substring(11,19) }}</span>
+                </div>
+                <pre v-if="log.output" style="background:#f5f7fa;color:#303133;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;margin:0">{{ log.output }}</pre>
+                <pre v-if="log.error_msg" style="background:#fef0f0;color:#F56C6C;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:0;margin-top:8px">{{ log.error_msg }}</pre>
+              </el-card>
+            </el-timeline-item>
+          </el-timeline>
+          <div v-if="taskLogs.length > 0" style="margin-top:16px;text-align:right">
+            <el-pagination v-model:current-page="historyPage" :total="historyTotal" :page-size="10" layout="total,prev,pager,next" @current-change="loadHistory" />
+          </div>
+        </el-tab-pane>
+
+      </el-tabs>
     </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 // 导入 Vue 的响应式工具
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 // 导入路由工具
 import { useRouter } from 'vue-router'
 // 导入任务 API 函数
@@ -643,6 +653,104 @@ const historyPage = ref(1)
 const historyTotal = ref(0)
 const historyTaskId = ref<number | null>(null)
 
+// @Ref: docs/sps/decisions/20260611_ui_ux_log_terminal.md | @Date: 2026-06-11
+// Live Streaming State
+const activeTab = ref('history')
+const liveLogs = ref('')
+const liveSearch = ref('')
+const liveAutoScroll = ref(true)
+const liveStatus = ref('STOPPED') // RUNNING, STOPPED, ERROR
+let liveStreamTimer: any = null
+const liveTerminalRef = ref<HTMLElement | null>(null)
+
+// 自动滚动监听
+watch(liveLogs, () => {
+  if (liveAutoScroll.value && liveTerminalRef.value) {
+    nextTick(() => {
+      liveTerminalRef.value!.scrollTop = liveTerminalRef.value!.scrollHeight
+    })
+  }
+})
+
+// 处理手动滚动，判断是否触底
+const handleLiveScroll = (e: Event) => {
+  const target = e.target as HTMLElement
+  // 考虑到浏览器缩放可能有小数点差异，阈值设为 10px
+  const isBottom = Math.abs(target.scrollHeight - target.clientHeight - target.scrollTop) < 10
+  liveAutoScroll.value = isBottom
+}
+
+// 恢复自动滚动
+const resumeAutoScroll = () => {
+  liveAutoScroll.value = true
+  if (liveTerminalRef.value) {
+    liveTerminalRef.value.scrollTop = liveTerminalRef.value.scrollHeight
+  }
+}
+
+// 高亮搜索日志
+const highlightedLogs = computed(() => {
+  if (!liveSearch.value) return liveLogs.value
+  try {
+    // Escape special characters in search string
+    const safeSearch = liveSearch.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`(${safeSearch})`, 'gi')
+    return liveLogs.value.replace(regex, '<mark class="log-highlight">$1</mark>')
+  } catch(e) {
+    return liveLogs.value
+  }
+})
+
+// 清除流轮询
+const clearLiveStream = () => {
+  if (liveStreamTimer) {
+    clearInterval(liveStreamTimer)
+    liveStreamTimer = null
+  }
+}
+
+// 抽屉关闭时的清理逻辑
+const onDrawerClose = () => {
+  clearLiveStream()
+}
+
+// 获取日志流
+const startLiveStream = async (id: number) => {
+  liveLogs.value = ''
+  liveStatus.value = 'RUNNING'
+  clearLiveStream()
+  
+  const fetchLogs = async () => {
+    try {
+      const res: any = await taskAPI.streamLog(id)
+      liveLogs.value = res.data.data.output || ''
+      if (res.data.data.status !== 'running') {
+        liveStatus.value = 'STOPPED'
+        clearLiveStream()
+      }
+    } catch(e) {
+      liveStatus.value = 'ERROR'
+      liveLogs.value += '\n\n[System Error] Failed to fetch live logs or connection lost.'
+      clearLiveStream()
+    }
+  }
+  
+  await fetchLogs()
+  liveStreamTimer = setInterval(fetchLogs, 1500)
+}
+
+// 杀掉任务
+const killLiveTask = async () => {
+  if (!historyTaskId.value) return
+  try {
+    await taskAPI.kill(historyTaskId.value)
+    ElMessage.success('Kill signal sent. Process will terminate shortly.')
+    // Let polling catch the STOPPED state
+  } catch(e: any) {
+    ElMessage.error(e.response?.data?.error || 'Failed to kill task')
+  }
+}
+
 /**
  * typeColor 函数：根据任务类型返回对应的 ElementPlus 标签颜色名。
  * 返回的对象是"映射表"：键是任务类型，值是 ElementPlus 的标签类型名。
@@ -685,19 +793,24 @@ async function load() {
 
 /**
  * runTask 函数：手动触发执行某个任务。
- * @param row 当前行的任务数据
- * 1. 记录正在运行的任务 ID（让按钮转圈）
- * 2. 调用后端 API 触发执行
- * 3. 弹出"已触发"提示
- * 4. 清除运行状态
- * 5. 刷新列表
  */
 async function runTask(row: any) {
   runningId.value = row.id             // 标记：这个任务正在被触发
-  await taskAPI.run(row.id)            // 调用 API：POST /tasks/{id}/run
-  ElMessage.success('Triggered')      // 弹出绿色成功提示："已触发"
-  runningId.value = null               // 清除运行状态（按钮停止转圈）
-  load()                               // 刷新任务列表
+  logTaskName.value = row.name
+  historyTaskId.value = row.id
+  activeTab.value = 'live'
+  drawerVisible.value = true           // 立即弹出面板，展示流
+
+  try {
+    await taskAPI.run(row.id)            // 调用 API：POST /tasks/{id}/run
+    ElMessage.success('Triggered')      // 弹出绿色成功提示："已触发"
+    startLiveStream(row.id)             // 开始轮询日志
+  } catch (e: any) {
+    ElMessage.error('Failed to trigger')
+  } finally {
+    runningId.value = null               // 清除运行状态（按钮停止转圈）
+    load()                               // 刷新任务列表
+  }
 }
 
 /**
@@ -731,6 +844,7 @@ async function showLogs(row: any) {
   logTaskName.value = row.name      // 记住任务名（抽屉标题用）
   historyTaskId.value = row.id
   historyPage.value = 1
+  activeTab.value = 'history'       // 默认展示历史记录
   drawerVisible.value = true        // 打开抽屉
   await loadHistory()
 }
@@ -757,6 +871,7 @@ onUnmounted(() => {
   if (daemonTimer) {
     clearInterval(daemonTimer)
   }
+  clearLiveStream()
 })
 </script>
 
@@ -902,5 +1017,121 @@ onUnmounted(() => {
   from { transform: translate(132px, 34px) rotate(0deg); }
   to { transform: translate(132px, 34px) rotate(360deg); }
 }
+
+/* 
+  @Ref: docs/sps/decisions/20260611_ui_ux_log_terminal.md 
+  Live Terminal Styling 
+*/
+.drawer-tabs :deep(.el-tabs__content) {
+  height: calc(100% - 55px); 
+  overflow: visible;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  gap: 16px;
+}
+
+.terminal-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #64748b;
+}
+.status-dot.running {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  animation: pulseGreen 1.5s infinite;
+}
+.status-dot.error {
+  background-color: #ef4444;
+}
+
+.status-text {
+  font-weight: 600;
+  font-size: 13px;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.terminal-search {
+  flex: 1;
+  max-width: 300px;
+}
+
+.terminal-body {
+  flex: 1;
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-radius: 0 0 8px 8px;
+  padding: 16px;
+  height: 60vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.terminal-content {
+  margin: 0;
+  font-family: 'Fira Code', var(--font-mono, monospace);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.terminal-empty {
+  color: #64748b;
+  font-family: 'Fira Code', var(--font-mono, monospace);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 40px;
+}
+
+.scroll-resume-btn {
+  position: sticky;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(15, 23, 42, 0.8);
+  color: #38bdf8;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  transition: all 0.2s;
+  z-index: 10;
+  display: inline-block;
+  text-align: center;
+}
+.scroll-resume-btn:hover {
+  background-color: rgba(15, 23, 42, 0.95);
+  color: #bae6fd;
+}
+
+:deep(.log-highlight) {
+  background-color: #f59e0b;
+  color: #fff;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
 
 </style>

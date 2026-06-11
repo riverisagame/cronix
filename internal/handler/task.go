@@ -5,11 +5,15 @@
 package handler
 
 import (
+    "fmt"
     "net/http"     // 网络请求：HTTP状态码定义
+    "os"
+    "path/filepath"
     "regexp"       // 正则表达式：输入校验
     "strconv"      // 字符串和数字互转：把URL参数中的字符串转成整数
     "strings"      // 字符串处理：字段拆分
 
+    "cronix/internal/executor"  // 底层执行器
     "cronix/internal/model"     // 本项目的数据模型：任务结构体定义
     "cronix/internal/scheduler"  // 本项目的调度器：定时任务执行引擎
     "cronix/internal/service"    // 本项目的服务层：业务逻辑处理
@@ -354,4 +358,32 @@ func (h *TaskHandler) GetAllDaemonStates(c *gin.Context) {
     }
     states := h.DaemonMon.GetAllDaemonStates()
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": states})
+}
+
+// KillTask 强制结束某个正在运行的任务执行
+// 路由：POST /api/tasks/:id/kill
+func (h *TaskHandler) KillTask(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    success := executor.CancelExecution(uint(id))
+    if success {
+        c.JSON(http.StatusOK, gin.H{"code": 0, "message": "task killed successfully"})
+    } else {
+        c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "no running execution found for this task"})
+    }
+}
+
+// StreamTaskLog 流式获取正在执行中的任务日志
+// 路由：GET /api/tasks/:id/stream
+func (h *TaskHandler) StreamTaskLog(c *gin.Context) {
+    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+    
+    logPath := filepath.Join("data", "logs", fmt.Sprintf("exec_%d.log", id))
+    
+    content, err := os.ReadFile(logPath)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "log stream not found"})
+        return
+    }
+    
+    c.String(http.StatusOK, string(content))
 }
