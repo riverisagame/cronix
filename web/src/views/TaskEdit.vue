@@ -209,6 +209,10 @@
         <el-divider content-position="left">Alert & Notification</el-divider>
         <el-form-item label="Webhook URL">
           <el-input v-model="notifyForm.webhook_url" placeholder="https://..." clearable />
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.4;word-break:break-all;">
+            支持企业微信、钉钉、飞书等机器人的 Webhook 地址。<strong>留空则不发送通知</strong>。<br/>
+            默认推送 JSON 数据格式：<code style="background:var(--bg-color-page);padding:2px 4px;border-radius:3px;">{"task": "任务名称", "status": "success/failed", "timestamp": "通知时间"}</code>
+          </div>
         </el-form-item>
         <el-form-item label="Notify On">
           <el-checkbox v-model="notifyForm.on_failure" label="Failure" />

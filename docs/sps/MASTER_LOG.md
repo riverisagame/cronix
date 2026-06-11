@@ -21,3 +21,4 @@
 | 2026-06-10 | Task-14 | scheduler | docs/sps/plans/20260610_dag_execution_engine.md | COMPLETED |
 | 2026-06-10 | Shell Job Escape     | Executor | docs/sps/plans/20260610_shell_job_escape.md             | [FINISHED] |
 | 2026-06-11 | Notify Hardening   | Notify   | docs/sps/decisions/20260611_notification_hardening.md   | [FINISHED] |
+| 2026-06-11 | Task-15 | 架构重构及界面体验(执行日志流转限制与列表空状态) | `docs/sps/plans/20260611_architecture_ux_enhancement.md` | DONE |

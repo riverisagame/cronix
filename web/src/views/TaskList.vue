@@ -79,9 +79,10 @@
         :row-class-name="rowClass" 动态设置每一行的 CSS 类名：
           已禁用的任务行会加上 disabled-row 类（透明度降低，视觉上变灰）
       -->
-      <el-table v-if="viewMode === 'table'" :data="tasks" stripe v-loading="loading" :row-class-name="rowClass" data-testid="task-table">
-        <!-- ID 列，宽度 60px -->
-        <el-table-column prop="id" label="ID" width="60" />
+      <template v-if="viewMode === 'table'">
+        <el-table v-if="tasks.length > 0" :data="tasks" stripe v-loading="loading" :row-class-name="rowClass" data-testid="task-table">
+          <!-- ID 列，宽度 60px -->
+          <el-table-column prop="id" label="ID" width="60" />
 
         <!--
           任务名称列
@@ -206,6 +207,11 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-empty v-else description="您还没有创建任何任务，点击右上方 [New Task] 开始吧！">
+        <el-button type="primary" @click="router.push('/tasks/new')">New Task</el-button>
+      </el-empty>
+    </template>
 
       <!-- 拓扑依赖网络 DAG 视图 (原生无依赖 SVG 方案) -->
       <!-- @Ref: docs/sps/plans/20260527_topology_shutdown_plan.md | @Date: 2026-05-27 -->

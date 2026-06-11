@@ -16,7 +16,10 @@
 package model
 
 // time 包提供 time.Time 类型，用来表示日期和时间
-import "time"
+import (
+    "fmt"
+    "time"
+)
 
 // ExecutionLog 代表一次任务执行留下的完整记录
 // 每一行就是一次执行，类似日记本里的一页
@@ -112,4 +115,48 @@ type ExecutionLog struct {
 // 这里显式指定，保证表名不会因为结构体改名而变化
 func (ExecutionLog) TableName() string {
     return "execution_logs"
+}
+
+// ============================================================
+// 状态机常量与方法
+// 保证状态只能单向、合法地流转，防止幽灵状态。
+// ============================================================
+
+const (
+    StatePending   = "pending"
+    StateRunning   = "running"
+    StateSuccess   = "success"
+    StateFailed    = "failed"
+    StateTimeout   = "timeout"
+    StateCancelled = "cancelled"
+)
+
+// CanTransitionTo 检查当前状态是否允许流转到目标状态
+func (l *ExecutionLog) CanTransitionTo(target string) bool {
+    switch l.Status {
+    case StatePending:
+        // 等待中只能转为运行中或被取消
+        return target == StateRunning || target == StateCancelled
+    case StateRunning:
+        // 运行中可以自然结束、失败、超时或被取消
+        return target == StateSuccess || target == StateFailed || target == StateTimeout || target == StateCancelled
+    case StateFailed, StateTimeout, StateCancelled:
+        // 失败或取消后，如果是自动/手动重试，会重置回等待中
+        return target == StatePending
+    case StateSuccess:
+        // 成功是绝对的终态
+        return false
+    default:
+        // 应对初始化时状态为空的特殊情况
+        return target == StatePending || target == StateRunning
+    }
+}
+
+// TransitionTo 执行状态流转，如果非法则返回 error
+func (l *ExecutionLog) TransitionTo(target string) error {
+    if !l.CanTransitionTo(target) {
+        return fmt.Errorf("invalid state transition from %s to %s", l.Status, target)
+    }
+    l.Status = target
+    return nil
 }

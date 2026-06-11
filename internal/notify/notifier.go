@@ -82,6 +82,10 @@ func (n *Notifier) send(event NotifyEvent) {
 // sendWebhook 发送Webhook通知（带重试机制）
 // Webhook = 向一个URL发送HTTP POST请求，把通知内容发给外部系统
 func (n *Notifier) sendWebhook(event NotifyEvent) {
+    if event.Config.WebhookURL == "" {
+        return // Hook URL 为空时不推送
+    }
+
     // 第一步：构造通知内容（JSON格式）
     payload := map[string]interface{}{                            // 通知的JSON数据
         "task":      event.TaskName,                              // 哪个任务
