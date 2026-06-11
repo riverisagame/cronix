@@ -80,7 +80,7 @@
           已禁用的任务行会加上 disabled-row 类（透明度降低，视觉上变灰）
       -->
       <template v-if="viewMode === 'table'">
-        <el-table v-show="tasks.length > 0" :data="tasks" stripe v-loading="loading" :row-class-name="rowClass" data-testid="task-table">
+        <el-table v-if="tasks.length > 0" :data="tasks" stripe v-loading="loading" :row-class-name="rowClass" data-testid="task-table">
           <!-- ID 列，宽度 60px -->
           <el-table-column prop="id" label="ID" width="60" />
 
