@@ -353,13 +353,13 @@
         <el-timeline-item v-for="log in taskLogs" :key="log.id" :timestamp="log.start_time" placement="top"
           :color="log.status==='success'?'#67C23A':log.status==='failed'?'#F56C6C':'#E6A23C'">
           <!-- 每条日志用卡片包裹 -->
-          <el-card shadow="hover">
+          <el-card shadow="hover" style="cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
             <!-- 标签行：状态标签 + 触发方式标签 + 退出码 -->
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
               <!-- 状态标签：成功绿色、失败红色 -->
-              <el-tag :type="log.status==='success'?'success':'danger'" size="small">{{ log.status?.toUpperCase() }}</el-tag>
+              <el-tag :type="log.status==='success'?'success':'danger'" effect="dark" size="small">{{ log.status?.toUpperCase() }}</el-tag>
               <!-- 触发方式标签：灰色信息标签 -->
-              <el-tag size="small" type="info">{{ log.trigger_type }}</el-tag>
+              <el-tag size="small" type="info" effect="plain">{{ log.trigger_type }}</el-tag>
               <!--
                 退出码（exit_code）：程序运行结束时的返回值，0 表示正常，非 0 表示异常
                 v-if="log.exit_code!==null" 如果退出码不为 null 才显示
@@ -802,8 +802,11 @@ onUnmounted(() => {
 }
 
 /* 节点背景毛玻璃底板 */
+/* @Ref: docs/sps/plans/20260611_ui_ux_pro_max_upgrade.md | @Date: 2026-06-11 */
 .glass-node-rect {
-  fill: #ffffff;
+  fill: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   stroke: var(--border-color);
   stroke-width: 1px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
