@@ -335,46 +335,13 @@
         
         <!-- Live Console Tab -->
         <el-tab-pane label="Live Console" name="live" style="height: 100%; display: flex; flex-direction: column;">
-          <div ref="fullscreenWrapperRef" class="fullscreen-wrapper" style="height: 100%; display: flex; flex-direction: column; background: var(--el-bg-color);">
-            <div class="terminal-header">
-              <div class="terminal-status">
-              <span class="status-dot" :class="liveStatus.toLowerCase()"></span>
-              <span class="status-text">{{ liveStatus }}</span>
-              <span class="status-time" v-if="liveStatus === 'RUNNING'" style="margin-left: 12px; font-size: 12px; color: #a8b2c1; font-family: var(--font-mono)">Elapsed: {{ liveDurationFormatted }}</span>
-            </div>
-            
-            <el-input v-model="liveSearch" placeholder="Search logs..." class="terminal-search" clearable size="small" data-testid="live-search">
-              <template #prefix><el-icon><Search /></el-icon></template>
-            </el-input>
-
-            <el-button size="small" type="primary" plain @click="toggleFullscreen" data-testid="btn-fullscreen">
-              <el-icon><FullScreen /></el-icon> Fullscreen
-            </el-button>
-
-            <el-popconfirm title="Are you sure to kill this task?" confirm-button-type="danger" @confirm="killLiveTask" :disabled="liveStatus !== 'RUNNING'">
-              <template #reference>
-                <el-button type="danger" size="small" :disabled="liveStatus !== 'RUNNING'" data-testid="btn-kill-task">
-                  <el-icon><VideoPause /></el-icon> Kill Task
-                </el-button>
-              </template>
-            </el-popconfirm>
-          </div>
-
-          <div 
-            class="terminal-body" 
-            ref="liveTerminalRef" 
-            @scroll="handleLiveScroll"
-          >
-            <!-- 渲染高亮 HTML，如果没有输入则直接展示内容 -->
-            <pre v-if="liveLogs" class="terminal-content" v-html="highlightedLogs"></pre>
-            <div v-else class="terminal-empty">Waiting for execution logs...</div>
-            
-            <!-- Auto-scroll indicator/button -->
-            <div class="scroll-resume-btn" v-show="!liveAutoScroll" @click="resumeAutoScroll">
-              Resume auto-scroll
-            </div>
-          </div>
-          </div>
+          <LogViewer
+        mode="live"
+        :status="liveStatus"
+        :logs="liveLogs"
+        :duration="liveDurationFormatted"
+        @kill="killLiveTask"
+      />
         </el-tab-pane>
 
         <!-- Execution History Tab -->
@@ -427,6 +394,7 @@ import { taskAPI, daemonAPI, logAPI } from '../api/index'
 import { Plus, Search, Refresh, VideoPlay, VideoPause, Delete, Edit, Tickets, FullScreen, Download } from '@element-plus/icons-vue'
 // ElMessage 是 ElementPlus 的消息提示工具（用来在页面上方弹出"操作成功"等提示）
 import { ElMessage } from 'element-plus'
+import LogViewer from '../components/LogViewer.vue'
 
 // 获取路由跳转工具
 const router = useRouter()
@@ -670,16 +638,6 @@ const historyTotal = ref(0)
 const historyTaskId = ref<number | null>(null)
 
 // @Ref: docs/sps/plans/20260611_task_20_log_enhancements.md | @Date: 2026-06-11
-const fullscreenWrapperRef = ref<HTMLElement | null>(null)
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    fullscreenWrapperRef.value?.requestFullscreen().catch(err => {
-      ElMessage.warning(`Error attempting to enable fullscreen: ${err.message}`)
-    })
-  } else {
-    document.exitFullscreen()
-  }
-}
 
 const liveStartTime = ref(0)
 const liveDuration = ref(0)
@@ -728,49 +686,8 @@ const deleteLogRecord = async (logId: number) => {
 // Live Streaming State
 const activeTab = ref('history')
 const liveLogs = ref('')
-const liveSearch = ref('')
-const liveAutoScroll = ref(true)
 const liveStatus = ref('STOPPED') // RUNNING, STOPPED, ERROR
 let liveStreamTimer: any = null
-const liveTerminalRef = ref<HTMLElement | null>(null)
-
-// 自动滚动监听
-watch(liveLogs, () => {
-  if (liveAutoScroll.value && liveTerminalRef.value) {
-    nextTick(() => {
-      liveTerminalRef.value!.scrollTop = liveTerminalRef.value!.scrollHeight
-    })
-  }
-})
-
-// 处理手动滚动，判断是否触底
-const handleLiveScroll = (e: Event) => {
-  const target = e.target as HTMLElement
-  // 考虑到浏览器缩放可能有小数点差异，阈值设为 10px
-  const isBottom = Math.abs(target.scrollHeight - target.clientHeight - target.scrollTop) < 10
-  liveAutoScroll.value = isBottom
-}
-
-// 恢复自动滚动
-const resumeAutoScroll = () => {
-  liveAutoScroll.value = true
-  if (liveTerminalRef.value) {
-    liveTerminalRef.value.scrollTop = liveTerminalRef.value.scrollHeight
-  }
-}
-
-// 高亮搜索日志
-const highlightedLogs = computed(() => {
-  if (!liveSearch.value) return liveLogs.value
-  try {
-    // Escape special characters in search string
-    const safeSearch = liveSearch.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const regex = new RegExp(`(${safeSearch})`, 'gi')
-    return liveLogs.value.replace(regex, '<mark class="log-highlight">$1</mark>')
-  } catch(e) {
-    return liveLogs.value
-  }
-})
 
 // 清除流轮询
 const clearLiveStream = () => {

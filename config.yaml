@@ -1,6 +1,6 @@
 auth:
     jwt_secret: f346aa8c45b6a233089ba0201a2d5b2b50ce1481fb1b9808de2bc0774e938f55
-    password: "$2a$10$roXATU6cz0kjOm7Kex/g9emnhUvHkahYncOfFC3rDeExmNvEqECB."
+    password: "$2a$10$GUOm63YfyR3penExlWHIHeLuZ9m4lDtkks76ZRd0BMLgoMrh0MCl6"
     username: admin
 circuit_breaker:
     cooldown_seconds: 60

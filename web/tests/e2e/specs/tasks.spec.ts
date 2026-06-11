@@ -44,16 +44,43 @@ test.describe('Tasks', () => {
     await taskList.goto()
     await page.waitForTimeout(500)
     await taskList.clickRunTask()
-    // Should not crash on rapid double-click
-    await taskList.clickRunTask()
-    await page.waitForTimeout(500)
+    
+    // UI now opens the drawer immediately on run. 
+    // We should expect the drawer to be visible instead of double clicking.
+    await expect(page.locator('.el-drawer').locator('.terminal-body')).toBeVisible()
+    
+    // Close the drawer by clicking the close button
+    await page.locator('.el-drawer__close-btn').click()
+    await expect(page.locator('.el-drawer')).toBeHidden({ timeout: 5000 })
   })
 
-  test('log drawer opens', async ({ page }) => {
+  test('log drawer opens and shows unified LogViewer', async ({ page }) => {
     const taskList = new TaskListPage(page)
     await taskList.goto()
     await page.waitForTimeout(500)
     await taskList.clickTaskLogs()
+    
+    // Switch to Live Console tab
+    await page.locator('.el-tabs__item', { hasText: 'Live Console' }).click()
+    
+    // It should have the shared terminal body
+    await expect(page.locator('.el-drawer').locator('.terminal-body')).toBeVisible()
+    // It should have a fullscreen button
+    await expect(page.locator('.el-drawer').locator('[data-testid="btn-fullscreen"]')).toBeVisible()
+    await page.locator('.el-drawer__close-btn').click()
+    await expect(page.locator('.el-drawer')).toBeHidden({ timeout: 5000 })
+  })
+
+  test('live console shows explicit STOPPED visual indicator', async ({ page }) => {
+    const taskList = new TaskListPage(page)
+    await taskList.goto()
     await page.waitForTimeout(500)
+    // Create and run a task, wait for it to stop
+    await taskList.clickRunTask()
+    // Switch to Live Console tab
+    await page.locator('.el-tabs__item', { hasText: 'Live Console' }).click()
+    
+    // Wait for task to finish or check stopped banner directly
+    await expect(page.locator('[data-testid="live-status-stopped"]')).toBeVisible({ timeout: 10000 })
   })
 })

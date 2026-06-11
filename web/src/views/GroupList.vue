@@ -61,7 +61,12 @@
                 <span style="font-size:12px;color:var(--text-secondary)">OK:{{ log.success_count }} FAIL:{{ log.failed_count }}/{{ log.member_count }}</span>
               </div>
             </div>
-            <div v-if="log.error_msg" style="font-size:12px;color:var(--error-color)">{{ log.error_msg }}</div>
+            <LogViewer
+              v-if="log.error_msg"
+              mode="history"
+              :status="log.status"
+              :logs="log.error_msg"
+            />
           </el-card>
         </el-timeline-item>
       </el-timeline>
@@ -83,6 +88,7 @@ import { useRouter } from 'vue-router'
 import { groupAPI, logAPI } from '../api/index'
 import { Plus, Edit, VideoPlay, Delete, Tickets, DeleteFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import LogViewer from '../components/LogViewer.vue'
 
 const router = useRouter()
 const groups = ref<any[]>([])

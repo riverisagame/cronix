@@ -76,18 +76,13 @@
           <el-descriptions-item label="Duration">{{ detail.end_time ? duration(detail.start_time,detail.end_time) : 'N/A' }}</el-descriptions-item>
         </el-descriptions>
 
-        <div v-if="detail.output" style="margin-bottom:16px">
-          <div style="font-weight:bold;margin-bottom:8px;color:#67C23A">Output</div>
-          <pre style="background:#f5f7fa;color:#303133;padding:14px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow:auto;margin:0">{{ outputDisplay }}</pre>
-          <el-button v-if="outputTruncated" text @click="showFullOutput = !showFullOutput" style="margin-top:4px">
-            {{ showFullOutput ? 'Collapse' : 'Show all (' + outputLineCount + ' lines)' }}
-          </el-button>
-        </div>
-
-        <div v-if="detail.error_msg">
-          <div style="font-weight:bold;margin-bottom:8px;color:#F56C6C">Error</div>
-          <pre style="background:#fef0f0;color:#F56C6C;padding:14px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;margin:0">{{ detail.error_msg }}</pre>
-        </div>
+        <LogViewer
+          mode="history"
+          :status="detail.status"
+          :logs="(detail.output || '') + (detail.error_msg ? '\n' + detail.error_msg : '')"
+          :duration="detail.end_time ? duration(detail.start_time, detail.end_time) : ''"
+          @download="(format) => downloadSingleLog(detail, format)"
+        />
       </template>
     </el-drawer>
   </div>
@@ -100,6 +95,7 @@ import type { Column } from 'element-plus'
 import { logAPI } from '../api/index'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import LogViewer from '../components/LogViewer.vue'
 
 const logs = ref<any[]>([])
 const total = ref(0)
@@ -113,15 +109,7 @@ const filters = reactive({ task_name:'', status:'', since:'' })
 const drawerVisible = ref(false)
 const detail = ref<any>(null)
 const detailLoading = ref(false)
-const showFullOutput = ref(false)
 
-const outputLineCount = computed(() => detail.value?.output ? detail.value.output.split('\n').length : 0)
-const outputTruncated = computed(() => outputLineCount.value > 500)
-const outputDisplay = computed(() => {
-  if (!detail.value?.output) return ''
-  if (!outputTruncated.value || showFullOutput.value) return detail.value.output
-  return detail.value.output.split('\n').slice(0, 200).join('\n') + '\n... (truncated)'
-})
 
 function formatTime(iso: string): string {
   if (!iso) return '-'
@@ -219,7 +207,6 @@ async function showDetail(rowData: any) {
   drawerVisible.value = true
   detail.value = null
   detailLoading.value = true
-  showFullOutput.value = false
   try {
     const r = await logAPI.getLog(rowData.id)
     detail.value = r.data.data
@@ -251,6 +238,18 @@ async function exportLogs(format: string) {
   } catch (e: any) {
     ElMessage.error(e.response?.data?.message || 'Failed')
   } finally { exporting.value = false }
+}
+
+const downloadSingleLog = (log: any, format: string) => {
+  const content = (log.output || '') + (log.error_msg ? '\n' + log.error_msg : '')
+  if (!content) return
+  const blob = new Blob([content], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `task_${log.task_name}_log_${log.id}.txt`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 onMounted(load)
