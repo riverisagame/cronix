@@ -24,4 +24,7 @@ export class TaskListPage extends BasePage {
   async expectTableVisible() {
     await expect(this.page.locator('[data-testid="task-table"]')).toBeVisible({ timeout: 10000 })
   }
+  async expectSearchApplied(query: string) {
+    await expect(this.page.locator('[data-testid="task-search"]')).toHaveValue(query, { timeout: 10000 })
+  }
 }

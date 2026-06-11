@@ -17,8 +17,7 @@ test.describe('Tasks', () => {
     const taskList = new TaskListPage(page)
     await taskList.goto()
     await taskList.searchTasks('backup')
-    await page.waitForTimeout(500)
-    await taskList.expectTableVisible()
+    await taskList.expectSearchApplied('backup')
   })
 
   test('new task button navigates to create page', async ({ page }) => {
