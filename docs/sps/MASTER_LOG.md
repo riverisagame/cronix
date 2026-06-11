@@ -20,4 +20,4 @@
 | 2026-06-10 | Task-13 | executor | docs/sps/plans/20260610_architect_remediation.md | COMPLETED |
 | 2026-06-10 | Task-14 | scheduler | docs/sps/plans/20260610_dag_execution_engine.md | COMPLETED |
 | 2026-06-10 | Shell Job Escape     | Executor | docs/sps/plans/20260610_shell_job_escape.md             | [FINISHED] |
-| 2026-06-11 | Notify Hardening   | Notify   | docs/sps/decisions/20260611_notification_hardening.md   | [SCAN]     |
+| 2026-06-11 | Notify Hardening   | Notify   | docs/sps/decisions/20260611_notification_hardening.md   | [FINISHED] |
