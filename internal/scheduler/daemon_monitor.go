@@ -23,7 +23,6 @@ import (
 	"cronix/internal/model"
 
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 )
 
 // DaemonState 状态常量
@@ -61,10 +60,22 @@ type daemonTaskState struct {
 	parentCtx context.Context
 }
 
+// TaskLoader 任务加载接口（由 service.TaskService 实现）
+type TaskLoader interface {
+	GetTask(id uint) (*model.Task, error)
+	GetDaemonTasks() ([]model.Task, error)
+}
+
+// LogQuerier 执行日志查询接口（由 service.ExecutionService 实现）
+type LogQuerier interface {
+	GetLatestLog(taskID uint) (*model.ExecutionLog, error)
+}
+
 // DaemonMonitor 常驻进程守护控制器
 // 内部使用 sync.RWMutex 保护并发状态访问
 type DaemonMonitor struct {
-	db       *gorm.DB
+	taskSvc  TaskLoader
+	execSvc  LogQuerier
 	executor *Executor
 	mu       sync.RWMutex
 	states   map[uint]*daemonTaskState
@@ -73,9 +84,10 @@ type DaemonMonitor struct {
 // NewDaemonMonitor 创建常驻进程守护控制器
 // 参数 db: 数据库连接（用于扫描常驻任务列表）
 // 参数 executor: 任务执行器（用于实际运行任务）
-func NewDaemonMonitor(db *gorm.DB, executor *Executor) *DaemonMonitor {
+func NewDaemonMonitor(taskSvc TaskLoader, execSvc LogQuerier, executor *Executor) *DaemonMonitor {
 	return &DaemonMonitor{
-		db:       db,
+		taskSvc:  taskSvc,
+		execSvc:  execSvc,
 		executor: executor,
 		states:   make(map[uint]*daemonTaskState),
 	}
@@ -85,7 +97,9 @@ func NewDaemonMonitor(db *gorm.DB, executor *Executor) *DaemonMonitor {
 // 参数 ctx: 全局上下文，取消时所有守护任务将被停止
 func (m *DaemonMonitor) Start(ctx context.Context) {
 	var tasks []model.Task
-	if err := m.db.Where("enabled = ? AND run_mode = ?", true, "daemon").Find(&tasks).Error; err != nil {
+	var err error
+	tasks, err = m.taskSvc.GetDaemonTasks()
+	if err != nil {
 		log.Error().Err(err).Msg("daemon monitor: 扫描常驻任务失败")
 		return
 	}
@@ -124,17 +138,20 @@ func (m *DaemonMonitor) StartDaemon(taskID uint) {
 // startDaemonInternal 内部启动守护协程的核心逻辑
 func (m *DaemonMonitor) startDaemonInternal(parentCtx context.Context, taskID uint) {
 	// 从数据库加载任务配置
-	var task model.Task
-	if err := m.db.First(&task, taskID).Error; err != nil {
+	taskPtr, err := m.taskSvc.GetTask(taskID)
+	if err != nil {
 		log.Error().Err(err).Uint("task_id", taskID).Msg("daemon monitor: 加载任务失败")
 		return
 	}
+	task := *taskPtr
 
 	// 创建该守护任务专属的可取消上下文
 	ctx, cancel := context.WithCancel(parentCtx)
 
+	// 初始化 daemon 状态
 	now := time.Now()
-	state := &daemonTaskState{
+	m.mu.Lock()
+	m.states[taskID] = &daemonTaskState{
 		DaemonState: DaemonState{
 			Status:             DaemonStarting,
 			RestartCount:       0,
@@ -144,12 +161,8 @@ func (m *DaemonMonitor) startDaemonInternal(parentCtx context.Context, taskID ui
 		cancel:    cancel,
 		parentCtx: parentCtx,
 	}
-
-	m.mu.Lock()
-	m.states[taskID] = state
 	m.mu.Unlock()
 
-	// 在独立协程中运行守护循环
 	go m.runDaemonLoop(ctx, taskID, &task)
 }
 
@@ -226,8 +239,11 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 
 		// 查询最新的执行日志，判断退出状态
 		var latestLog model.ExecutionLog
-		err := m.db.Where("task_id = ?", taskID).Order("id DESC").First(&latestLog).Error
-		exitSuccess := (err == nil && latestLog.Status == "success") || wasScheduled
+		latestLogPtr, logErr := m.execSvc.GetLatestLog(taskID)
+		if logErr == nil {
+			latestLog = *latestLogPtr
+		}
+		exitSuccess := (logErr == nil && latestLog.Status == "success") || wasScheduled
 
 		// 根据重启策略判定是否需要重启
 		// 根据重启策略判定是否需要重启（定时重启强制重启）

@@ -298,8 +298,8 @@ func runServe(cmd *cobra.Command, args []string) {
 
     // --- 初始化常驻守护控制器 (DaemonMonitor) ---
     // @Ref: docs/sps/plans/20260605_daemon_supervisor_feature.md | @Date: 2026-06-05
-    daemonMon := scheduler.NewDaemonMonitor(database.DB, exec)
-    go daemonMon.Start(ctx)
+	daemonMon := scheduler.NewDaemonMonitor(taskSvc, execSvc, exec)
+	go daemonMon.Start(ctx)
     log.Info().Msg("常驻守护控制器已启动")
     taskSvc.DaemonMon = daemonMon // 注入 TaskService 以支持热更新
 

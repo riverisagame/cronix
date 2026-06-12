@@ -215,6 +215,13 @@ func (s *TaskService) UpdateTaskDeps(taskID uint, depIDs []uint) error {
 	return nil
 }
 
+// GetDaemonTasks 返回所有启用且模式为 daemon 的任务（供 DaemonMonitor 扫描使用）
+func (s *TaskService) GetDaemonTasks() ([]model.Task, error) {
+    var tasks []model.Task
+    err := s.DB.Where("run_mode = ? AND enabled = ?", "daemon", true).Find(&tasks).Error
+    return tasks, err
+}
+
 // GetTaskNotify 获取任务的通知配置
 func (s *TaskService) GetTaskNotify(taskID uint) (*model.NotifyConfig, error) {
 	var cfg model.NotifyConfig

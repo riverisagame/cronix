@@ -277,6 +277,16 @@ func (s *ExecutionService) ExportLogsStream(taskName, status, since string, maxR
 
 // CleanOldLogs 删除超过指定天数的旧日志
 // 参数 retentionDays：保留天数（超过这个天数的日志会被删除）
+// GetLatestLog 获取指定任务的最新一条执行日志（供 daemon 退出后判定 exitSuccess）
+func (s *ExecutionService) GetLatestLog(taskID uint) (*model.ExecutionLog, error) {
+    var log model.ExecutionLog
+    err := s.DB.Where("task_id = ?", taskID).Order("id DESC").First(&log).Error
+    if err != nil {
+        return nil, err
+    }
+    return &log, nil
+}
+
 func (s *ExecutionService) CleanOldLogs(retentionDays int) error {
     cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour) // 计算截止时间
     return s.DB.Where("created_at < ?", cutoff).Delete(&model.ExecutionLog{}).Error // 删除早于截止时间的记录

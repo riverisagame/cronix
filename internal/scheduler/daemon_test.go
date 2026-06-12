@@ -1,5 +1,4 @@
 package scheduler
-
 import (
 	"context"
 	"cronix/internal/config"
@@ -71,10 +70,10 @@ func TestDaemonMonitor_KeepAlive(t *testing.T) {
 		t.Fatalf("new executor failed: %v", err)
 	}
 
-	// 初始化 DaemonMonitor。在 RED 阶段，NewDaemonMonitor 函数及 DaemonMonitor 结构体尚未实现，编译报错。
-	monitor := NewDaemonMonitor(db, executor)
-	
-	// 启动守护，它会在后台加载 task 并启动守护协程
+	// 使用包内轻量 mock（避免 import cycle with service 包）
+	taskSvc := &testTaskLoader{db: db}
+	execSvc := &testLogQuerier{db: db}
+	monitor := NewDaemonMonitor(taskSvc, execSvc, executor)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go monitor.Start(ctx)
@@ -137,8 +136,7 @@ func TestDaemonMonitor_Stop(t *testing.T) {
 
 	engine := NewEngine(db)
 	executor, _ := NewExecutor(db, cfg, engine)
-	monitor := NewDaemonMonitor(db, executor)
-
+	monitor := NewDaemonMonitor(&testTaskLoader{db: db}, &testLogQuerier{db: db}, executor)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go monitor.Start(ctx)
@@ -146,7 +144,7 @@ func TestDaemonMonitor_Stop(t *testing.T) {
 	// 等待 1 秒让进程成功跑起来
 	time.Sleep(1 * time.Second)
 
-	state, exists := monitor.GetDaemonState(task.ID)
+	state, exists := monitor.GetDaemonState(task.ID)  // task.ID 由 GORM Create 后自动填充
 	if !exists || state.Status != DaemonRunning {
 		t.Fatalf("expected task %d to be in RUNNING state, got: %+v", task.ID, state)
 	}
@@ -173,4 +171,37 @@ func TestDaemonMonitor_Stop(t *testing.T) {
 	if countAfter > countBefore {
 		t.Errorf("expected log count to stay at %d after stop, but grew to %d", countBefore, countAfter)
 	}
+}
+
+// Mock 实现：TaskLoader 接口
+type testTaskLoader struct {
+	db *gorm.DB
+}
+
+func (m *testTaskLoader) GetTask(id uint) (*model.Task, error) {
+	var task model.Task
+	if err := m.db.First(&task, id).Error; err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (m *testTaskLoader) GetDaemonTasks() ([]model.Task, error) {
+	var tasks []model.Task
+	err := m.db.Where("run_mode = ? AND enabled = ?", "daemon", true).Find(&tasks).Error
+	return tasks, err
+}
+
+// Mock 实现：LogQuerier 接口
+type testLogQuerier struct {
+	db *gorm.DB
+}
+
+func (m *testLogQuerier) GetLatestLog(taskID uint) (*model.ExecutionLog, error) {
+	var log model.ExecutionLog
+	err := m.db.Where("task_id = ?", taskID).Order("id DESC").First(&log).Error
+	if err != nil {
+		return nil, err
+	}
+	return &log, nil
 }
