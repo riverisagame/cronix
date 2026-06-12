@@ -11,19 +11,28 @@
 
 <template>
   <div>
-    <!-- 页面头部：左侧标题，右侧"新建任务"按钮 -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2 style="margin:0">Task Management</h2>
-      <!--
-        el-button type="primary" 蓝色按钮
-        @click="router.push('/tasks/new')" 点击后跳转到新建任务页面
-        /tasks/new 路由中，new 会被当作 :id 参数，TaskEdit.vue 根据 id==='new' 判断是新建模式
-      -->
-      <el-button type="primary" @click="router.push('/tasks/new')" data-testid="btn-new-task">
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">Task Management</h2>
+        <p class="page-subtitle">{{ daemonRunningCount > 0 ? `${daemonRunningCount} daemon${daemonRunningCount>1?'s':''} active` : 'Manage your scheduled & daemon tasks' }}</p>
+      </div>
+      <el-button type="primary" size="large" @click="router.push('/tasks/new')" data-testid="btn-new-task" class="btn-new-task">
         <el-icon><Plus /></el-icon> New Task
       </el-button>
     </div>
 
+    <!-- Daemon 状态栏（仅在有 daemon 任务时显示） -->
+    <div v-if="daemonRunningCount > 0" class="daemon-bar">
+      <span class="daemon-dot running"></span>
+      <span style="font-family:var(--font-mono);font-weight:600;color:#10b981">{{ daemonRunningCount }} RUNNING</span>
+      <span class="daemon-dot stopped" v-if="daemonStoppedCount > 0"></span>
+      <span v-if="daemonStoppedCount > 0" style="font-family:var(--font-mono);color:var(--text-secondary)">{{ daemonStoppedCount }} stopped</span>
+      <span class="daemon-dot backoff" v-if="daemonBackoffCount > 0"></span>
+      <span v-if="daemonBackoffCount > 0" style="font-family:var(--font-mono);color:var(--warning-color)">{{ daemonBackoffCount }} backoff</span>
+      <span class="daemon-dot fatal" v-if="daemonFatalCount > 0"></span>
+      <span v-if="daemonFatalCount > 0" style="font-family:var(--font-mono);color:var(--danger-color)">{{ daemonFatalCount }} fatal</span>
+    </div>
     <el-card shadow="hover">
       <!--
         操作栏行：搜索框 + 类型筛选 + 刷新按钮
@@ -105,7 +114,10 @@
         <el-table-column label="Cron / Mode" width="160">
           <template #default="{ row }">
             <template v-if="row.run_mode === 'daemon'">
-              <el-tag :type="daemonStatusColor(getDaemonStatus(row.id))" :class="{'daemon-running-tag': getDaemonStatus(row.id) === 'RUNNING'}">{{ getDaemonStatus(row.id) }}</el-tag>
+              <div style="display:flex;align-items:center;gap:6px">
+                <el-tag :type="daemonStatusColor(getDaemonStatus(row.id))" :class="{'daemon-running-tag': getDaemonStatus(row.id) === 'RUNNING'}" size="small">{{ getDaemonStatus(row.id) }}</el-tag>
+                <span v-if="getDaemonUptime(row.id)" style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);white-space:nowrap">{{ getDaemonUptime(row.id) }}</span>
+              </div>
               <div v-if="getDaemonStatus(row.id) === 'BACKOFF'" style="margin-top:3px">
                 <span class="retry-info warning">↻ {{ getDaemonRestartInfo(row.id) }}</span>
               </div>
@@ -699,13 +711,17 @@ const deleteLogRecord = async (logId: number) => {
   try {
     await logAPI.deleteLog(logId)
     ElMessage.success('Log deleted successfully')
-    const idx = taskLogs.value.findIndex(l => l.id === logId)
-    if (idx !== -1) taskLogs.value.splice(idx, 1)
   } catch (e: any) {
     ElMessage.error(e.response?.data?.message || 'Failed to delete log')
   }
 }
 
+const daemonTaskIds = computed(() => Object.keys(daemonStates.value).map(Number))
+const daemonRunningCount = computed(() => daemonTaskIds.value.filter(id => getDaemonStatus(id) === 'RUNNING').length)
+const daemonStoppedCount = computed(() => daemonTaskIds.value.filter(id => getDaemonStatus(id) === 'STOPPED').length)
+const daemonBackoffCount = computed(() => daemonTaskIds.value.filter(id => getDaemonStatus(id) === 'BACKOFF').length)
+const daemonFatalCount = computed(() => daemonTaskIds.value.filter(id => getDaemonStatus(id) === 'FATAL').length)
+// 清除流轮询
 // @Ref: docs/sps/decisions/20260611_ui_ux_log_terminal.md | @Date: 2026-06-11
 // Live Streaming State
 const activeTab = ref('history')
@@ -1215,6 +1231,76 @@ onUnmounted(() => {
   .daemon-running-tag {
     animation: daemon-pulse 2s ease-in-out infinite;
   }
+}
+
+/* ====== Premium Design: Header ====== */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(139,92,246,0.05) 100%);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.page-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.btn-new-task {
+  border-radius: 8px !important;
+  font-weight: 600;
+}
+
+/* ====== Daemon Status Bar ====== */
+.daemon-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  background: var(--surface-color);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+}
+.daemon-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.daemon-dot.running {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16,185,129,0.5);
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+.daemon-dot.stopped { background: #64748b; }
+.daemon-dot.backoff { background: var(--warning-color); }
+.daemon-dot.fatal { background: var(--danger-color); }
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes dot-pulse {
+    0%, 100% { box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+    50% { box-shadow: 0 0 12px rgba(16,185,129,0.8); }
+  }
+}
+
+/* ====== Card glass effect ====== */
+:deep(.el-card) {
+  border-radius: 10px !important;
+  border: 1px solid var(--border-color) !important;
 }
 
 /* 表格行 hover 增强 */
