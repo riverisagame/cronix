@@ -35,10 +35,15 @@ type ShellResult struct {
 // 参数 runAs：Windows下忽略
 // 返回值：ShellResult指针，包含输出、退出码、错误信息
 func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSec int, runAs string, taskID uint) *ShellResult {
-    // 第一步：创建一个带超时的上下文
-    // time.Duration(timeoutSec)*time.Second 把秒数转成Go标准的时间长度类型
-    tCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
-    defer cancel()                                              // 函数结束时取消上下文，释放资源
+    // 第一步：创建上下文（超时为 0 时不限时，仅响应外部 ctx 取消）
+    var tCtx context.Context
+    var cancel context.CancelFunc
+    if timeoutSec > 0 {
+        tCtx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+    } else {
+        tCtx, cancel = context.WithCancel(ctx)
+    }
+    defer cancel()
 
     if taskID > 0 {
         RunningTaskCancels.Store(taskID, cancel)

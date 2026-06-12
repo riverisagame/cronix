@@ -303,11 +303,10 @@ func (e *Executor) ExecuteTaskWithContext(ctx context.Context, taskID uint) {
     log.Info().Str("task", task.Name).Uint("id", task.ID).Msg("daemon executing task")
 
     // 第三步：执行任务（常驻任务不重试，由 DaemonMonitor 统一管理重启策略）
-    timeout := task.TimeoutSec
-    if maxTO := e.cfg.Executor.MaxTimeoutSec; maxTO > 0 && timeout > maxTO {
-        timeout = maxTO
-    }
-    e.runTaskByTypeCtx(ctx, &task, &execLog, timeout)
+    // Daemon 任务不使用 TimeoutSec — 生命周期由 DaemonMonitor ctx 取消管理
+    // 否则 DB 默认值 300s 会导致 daemon 每 5 分钟被超时强杀
+    e.runTaskByTypeCtx(ctx, &task, &execLog, 0)
+
 
     // 第四步：发送通知
     e.notifyTaskResult(&task, &execLog)
