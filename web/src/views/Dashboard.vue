@@ -246,8 +246,15 @@
                   <code> 标签表示这是代码/程序输出，用等宽字体显示
                   substring(0, 100) 截取前 100 个字符，超出部分省略
                   如果没有输出内容，显示 '-' 占位符
+                -->
+                <code v-if="row.output" style="font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)">{{ row.output?.substring(0, 100) }}{{ row.output?.length > 100 ? '...' : '' }}</code>
+                <span v-else style="color:var(--text-secondary)">-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
     </el-row>
-
 	<!-- 第三行：性能指标图表 -->
 	<!-- @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05 -->
 	<el-row :gutter="20" style="margin-top:20px">

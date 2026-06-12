@@ -112,6 +112,7 @@
               <div v-if="getDaemonStatus(row.id) === 'FATAL'" style="margin-top:3px">
                 <span class="retry-info danger">✕ {{ getDaemonRestartInfo(row.id) }}</span>
               </div>
+            </template>
             <template v-else>
               <!-- 用 el-tag 标签显示 Cron 表达式，type="info" 灰色标签 -->
               <el-tag type="info">{{ row.cron_expr || 'None' }}</el-tag>
@@ -1192,6 +1193,7 @@ onUnmounted(() => {
   color: #fff;
   padding: 0 2px;
   border-radius: 2px;
+}
 
 /* Daemon RUNNING status pulse */
 @keyframes daemon-pulse {
