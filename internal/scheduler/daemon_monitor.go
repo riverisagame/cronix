@@ -165,7 +165,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 	// 否则成功 1s，失败指数退避
 	restartDelaySec := task.RestartDelaySec
 	useFixedDelay := restartDelaySec > 0
-
+	scheduledRestartSec := task.ScheduledRestartSec
 	restartCount := 0
 
 	for {
@@ -189,8 +189,22 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 
 		log.Info().Uint("task_id", taskID).Str("task", task.Name).Int("restart_count", restartCount).Msg("daemon monitor: 拉起常驻任务")
 
-		// 同步执行任务（阻塞直到任务退出或 ctx 被取消）
-		m.executor.ExecuteTaskWithContext(ctx, taskID)
+		// 主动定时重启：创建子 context + 定时器
+		wasScheduled := false
+		if scheduledRestartSec > 0 {
+			execCtx, execCancel := context.WithCancel(ctx)
+			timer := time.AfterFunc(time.Duration(scheduledRestartSec)*time.Second, func() {
+				execCancel()
+				log.Info().Uint("task_id", taskID).Int("interval_sec", scheduledRestartSec).
+					Msg("daemon monitor: 定时重启触发")
+			})
+			m.executor.ExecuteTaskWithContext(execCtx, taskID)
+			timer.Stop()
+			// 子 ctx 被取消但父 ctx 没被取消 = 定时重启触发
+			wasScheduled = execCtx.Err() != nil && ctx.Err() == nil
+		} else {
+			m.executor.ExecuteTaskWithContext(ctx, taskID)
+		}
 
 		// 再次检查 ctx 是否已被取消（手动 Stop）
 		select {
@@ -204,7 +218,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		// 查询最新的执行日志，判断退出状态
 		var latestLog model.ExecutionLog
 		err := m.db.Where("task_id = ?", taskID).Order("id DESC").First(&latestLog).Error
-		exitSuccess := err == nil && latestLog.Status == "success"
+		exitSuccess := (err == nil && latestLog.Status == "success") || wasScheduled
 
 		// 根据重启策略判定是否需要重启
 		shouldRestart := false

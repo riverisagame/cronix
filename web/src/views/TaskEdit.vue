@@ -74,7 +74,12 @@
           <el-input-number v-model="form.restart_delay_sec" :min="0" :max="86400" />
           <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 = auto backoff (1s~60s)</span>
         </el-form-item>
-        <!--
+
+        <!-- 常驻任务特有字段：Scheduled Restart -->
+        <el-form-item label="Scheduled Restart(s)" v-if="form.run_mode === 'daemon'">
+          <el-input-number v-model="form.scheduled_restart_sec" :min="0" :max="86400" />
+          <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 = never, >0 = force restart every N seconds</span>
+        </el-form-item>
           Cron 表达式（必填项）
           Cron 是一种时间调度语法：5 个字段分别表示分、时、日、月、星期
           例如 "0 30 8 * * *" 表示每天上午 8:30 执行
@@ -319,8 +324,7 @@ const saving = ref(false)
  *   task_type: 任务类型，默认 'shell'
  *   command: Shell 命令 / Cleanup 的 JSON 配置（空）
  *   http_method: HTTP 请求方法，默认 'GET'
- *   http_url: HTTP 请求的 URL 地址（空）
- *   http_auth_type: HTTP 认证方式，默认 'none'
+const form = ref<any>({ name:'', run_mode:'cron', restart_policy:'always', max_restart_attempts:10, restart_delay_sec:0, scheduled_restart_sec:0, cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'root', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
  *   work_dir: Shell 命令的工作目录（空）
  *   timeout_sec: 超时时间，默认 300 秒（5 分钟）
  *   retry_count: 失败重试次数，默认 0

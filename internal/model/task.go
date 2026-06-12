@@ -165,7 +165,11 @@ type Task struct {
     // 0 = 使用内置退避策略（成功 1s，失败指数退避 1s→60s）
     // > 0 = 每次重启前固定等待该秒数（成功和失败均适用）
     RestartDelaySec int `gorm:"default:0" json:"restart_delay_sec,omitempty"`
-    // WorkDir 工作目录（shell 任务在哪个文件夹下面执行）
+
+    // ScheduledRestartSec 主动定时重启间隔（秒），仅 daemon 模式生效
+    // 0 = 不主动重启，进程自然退出后按 RestartPolicy 处理
+    // > 0 = 不管进程是否存活，每 N 秒强制杀死并重启（不累计 RestartCount）
+    ScheduledRestartSec int `gorm:"default:0" json:"scheduled_restart_sec,omitempty"`
     // 比如指定为 "/home/user/scripts"，执行命令时会先切换到这个目录
     // 选填，不写就在当前目录下执行
     WorkDir string `json:"work_dir,omitempty"`
