@@ -49,9 +49,10 @@
         <!--
           应用名称和 Logo：一个居中显示的标题 "Cronix"
           letter-spacing 让字母之间有一点间距，看起来更美观
-        -->
-        <div style="padding:18px 20px;font-weight:700;font-size:17px;color:var(--text-main);text-align:center;letter-spacing:1px">Cronix</div>
-
+        <div class="sidebar-logo">
+          <span class="logo-text">Cronix</span>
+          <span class="logo-badge">v1.16</span>
+        </div>
         <!--
           菜单项 index="/"：点击后跳转到网站根路径 /（即 Dashboard 仪表盘页）
           el-icon 包裹图标组件，Odometer 是一个仪表盘图标
@@ -378,5 +379,30 @@ body {
   border: 1px solid #00f2fe !important;
   animation: pulseVibrant 2s infinite;
   font-weight: 600;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 22px 20px 16px;
+}
+.logo-text {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.logo-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  background: rgba(100,116,139,0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
 }
 </style>

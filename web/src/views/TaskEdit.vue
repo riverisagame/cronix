@@ -90,11 +90,10 @@
         <!-- ======== Daemon Configuration ======== -->
         <template v-if="form.run_mode === 'daemon'">
           <el-divider content-position="left">Daemon Configuration</el-divider>
+          <div class="daemon-config-card">
 
           <el-form-item label="Restart Policy">
             <el-select v-model="form.restart_policy" style="width:200px">
-              <el-option label="Always" value="always" />
-              <el-option label="On Failure" value="on-failure" />
               <el-option label="Never" value="never" />
             </el-select>
           </el-form-item>
@@ -118,6 +117,7 @@
             <el-input-number v-model="form.scheduled_restart_sec" :min="0" :max="86400" />
             <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 = never, >0 = force restart every N seconds</span>
           </el-form-item>
+          </div>
         </template>
         <el-form-item label="Task Type">
           <el-radio-group v-model="form.task_type" data-testid="task-form-type">
@@ -606,5 +606,13 @@ async function save() {
   border-color: var(--primary-color) !important;
   color: var(--primary-color) !important;
   background: rgba(64, 158, 255, 0.05) !important;
+}
+
+.daemon-config-card {
+  background: linear-gradient(135deg, rgba(139,92,246,0.04) 0%, rgba(59,130,246,0.04) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px 16px 2px;
+  margin-bottom: 12px;
 }
 </style>
