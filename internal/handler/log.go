@@ -57,7 +57,7 @@ func (h *LogHandler) GetDashboardStats(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": stats}) // 返回统计数据
+    respondOK(c, stats) // 返回统计数据
 }
 
 // GetSettings 读取当前系统设置
@@ -109,7 +109,7 @@ func (h *LogHandler) UpdateSettings(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "settings saved"})
+    respondOKMsg(c, "settings saved")
 }
 
 // ClearAllLogs deletes all execution logs.
@@ -145,7 +145,7 @@ func (h *LogHandler) DeleteLog(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+    respondOKMsg(c, "ok")
 }
 
 // GetLog returns a single execution log with full output.
@@ -156,14 +156,14 @@ func (h *LogHandler) GetLog(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "log not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": log})
+	respondOK(c, log)
 }
 
 // GetDashboardMetrics 返回系统的运行指标
 // @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05
 func (h *LogHandler) GetDashboardMetrics(c *gin.Context) {
 	metrics := h.ExecSvc.GetDashboardMetrics()
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": metrics})
+	respondOK(c, metrics)
 }
 
 // ClearGroupLogs deletes all execution logs for a group.

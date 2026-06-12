@@ -106,7 +106,7 @@ func (h *TaskHandler) ListTasks(c *gin.Context) {
         return
     }
     // 查询成功，返回任务列表和总数
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"items": tasks, "total": total}})
+    respondOK(c, gin.H{"items": tasks, "total": total})
 }
 
 // CreateTask 创建新任务
@@ -115,11 +115,11 @@ func (h *TaskHandler) ListTasks(c *gin.Context) {
 func (h *TaskHandler) CreateTask(c *gin.Context) {
     var task model.Task                                          // 声明一个Task结构体，存放前端发来的任务数据
     if err := c.ShouldBindJSON(&task); err != nil {              // 把请求中的JSON绑定到task变量
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()}) // 数据格式错误，返回400
+        respondError(c, http.StatusBadRequest, err.Error()) // 数据格式错误，返回400
         return
     }
     if task.Name == "" {                                         // 任务名是必填项，不能为空
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "task name is required"})
+        respondError(c, http.StatusBadRequest, "task name is required")
         return
     }
     if task.TaskType == "" {                                     // 任务类型默认 shell
@@ -131,10 +131,10 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
         return
     }
     if err := h.TaskSvc.CreateTask(&task); err != nil {          // 调用服务层保存任务到数据库
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()}) // 保存失败（比如名字重复）
+        respondError(c, http.StatusBadRequest, err.Error()) // 保存失败（比如名字重复）
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": task}) // 创建成功，返回刚创建的任务
+    respondOK(c, task) // 创建成功，返回刚创建的任务
 }
 
 // GetTask 获取单个任务的详细信息
@@ -151,7 +151,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
     if task.HTTPAuthConfig != "" {
         task.HTTPAuthConfig = "***"
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": task}) // 返回任务详情
+    respondOK(c, task) // 返回任务详情
 }
 
 // UpdateTask 更新任务信息
@@ -161,7 +161,7 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)           // 获取任务ID
     var updates map[string]interface{}                           // 声明一个映射表，key是字段名，value是新值
     if err := c.ShouldBindJSON(&updates); err != nil {           // 把请求JSON绑定到映射表
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+        respondError(c, http.StatusBadRequest, err.Error())
         return
     }
     // 清除只读/计算字段，防止前端传入这些值被写入数据库
@@ -202,7 +202,7 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
         }
     }
     if err := h.TaskSvc.UpdateTask(uint(id), updates); err != nil { // 调用服务层更新任务
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+        respondError(c, http.StatusBadRequest, err.Error())
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})    // 更新成功
@@ -226,7 +226,7 @@ func (h *TaskHandler) RunTask(c *gin.Context) {
     if h.Executor != nil {                                      // 如果执行器对象存在
         h.Executor.RunTaskNow(uint(id))                         // 立即触发任务（在后台执行）
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "manual trigger queued"}) // 返回"已排队"提示
+    respondOKMsg(c, "manual trigger queued") // 返回"已排队"提示
 }
 
 // GetTaskLogs 获取某个任务的执行日志（分页）
@@ -268,11 +268,11 @@ func (h *TaskHandler) UpdateTaskDeps(c *gin.Context) {
         DepIDs []uint `json:"dep_ids"`                          // 依赖的任务ID数组，前端传递的JSON字段名为dep_ids
     }
     if err := c.ShouldBindJSON(&req); err != nil {               // 解析请求JSON
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+        respondError(c, http.StatusBadRequest, err.Error())
         return
     }
     if err := h.TaskSvc.UpdateTaskDeps(uint(id), req.DepIDs); err != nil { // 更新依赖关系
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+        respondError(c, http.StatusBadRequest, err.Error())
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})    // 更新成功
@@ -294,7 +294,7 @@ func (h *TaskHandler) UpdateTaskNotify(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	var cfg model.NotifyConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+		respondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := h.TaskSvc.UpdateTaskNotify(uint(id), &cfg); err != nil {
@@ -343,10 +343,10 @@ func (h *TaskHandler) GetDaemonStatus(c *gin.Context) {
     }
     state, exists := h.DaemonMon.GetDaemonState(uint(id))
     if !exists {
-        c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"status": scheduler.DaemonStopped}})
+        respondOK(c, gin.H{"status": scheduler.DaemonStopped})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": state})
+    respondOK(c, state)
 }
 
 // GetAllDaemonStates 批量获取所有常驻守护任务的状态

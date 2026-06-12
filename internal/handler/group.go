@@ -26,7 +26,7 @@ func (h *GroupHandler) ListGroups(c *gin.Context) {
     if groups == nil {
         groups = []model.TaskGroup{}
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": groups})
+    respondOK(c, groups)
 }
 
 func (h *GroupHandler) CreateGroup(c *gin.Context) {
@@ -39,7 +39,7 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": g})
+    respondOK(c, g)
 }
 
 func (h *GroupHandler) GetGroup(c *gin.Context) {
@@ -67,7 +67,7 @@ func (h *GroupHandler) UpdateGroup(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+    respondOKMsg(c, "ok")
 }
 
 func (h *GroupHandler) DeleteGroup(c *gin.Context) {
@@ -96,7 +96,7 @@ func (h *GroupHandler) SetMembers(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
         return
     }
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+    respondOKMsg(c, "ok")
 }
 
 func (h *GroupHandler) RunGroup(c *gin.Context) {
@@ -112,7 +112,7 @@ func (h *GroupHandler) RunGroup(c *gin.Context) {
         return
     }
     go h.Executor.RunGroup(g, members, "manual")
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "group triggered", "data": gin.H{"mode": g.Mode, "member_count": len(members)}})
+    respondOK(c, gin.H{"mode": g.Mode, "member_count": len(members)})
 }
 
 func (h *GroupHandler) GetGroupLogs(c *gin.Context) {
