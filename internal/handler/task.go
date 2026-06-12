@@ -222,11 +222,18 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 // RunTask 手动触发一次任务执行（不等待Cron定时）
 // 路由：POST /api/tasks/:id/run
 func (h *TaskHandler) RunTask(c *gin.Context) {
-    id, _ := strconv.ParseUint(c.Param("id"), 10, 64)           // 获取任务ID
-    if h.Executor != nil {                                      // 如果执行器对象存在
-        h.Executor.RunTaskNow(uint(id))                         // 立即触发任务（在后台执行）
-    }
-    respondOKMsg(c, "manual trigger queued") // 返回"已排队"提示
+       id, _ := strconv.ParseUint(c.Param("id"), 10, 64)           // 获取任务ID
+       // 常驻守护任务由 DaemonMonitor 托管，不允许手动触发
+       if h.TaskSvc != nil {
+               if task, err := h.TaskSvc.GetTask(uint(id)); err == nil && task.RunMode == "daemon" {
+                       respondError(c, http.StatusBadRequest, "常驻守护任务不允许手动触发，请使用 /daemon/start")
+                       return
+               }
+       }
+       if h.Executor != nil {                                      // 如果执行器对象存在
+               h.Executor.RunTaskNow(uint(id))                         // 立即触发任务（在后台执行）
+       }
+       respondOKMsg(c, "manual trigger queued") // 返回"已排队"提示
 }
 
 // GetTaskLogs 获取某个任务的执行日志（分页）

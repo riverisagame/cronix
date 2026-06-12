@@ -234,6 +234,16 @@ func (e *Executor) executeTask(taskID uint) {
         log.Error().Err(err).Uint("task_id", taskID).Msg("fetch task failed")
         return
     }
+       // 防重：同一任务已有未完成执行记录时跳过，防止并发重复执行
+       var runningCount int64
+       e.db.Model(&model.ExecutionLog{}).
+               Where("task_id = ? AND status = ? AND end_time IS NULL", taskID, model.StateRunning).
+               Count(&runningCount)
+       if runningCount > 0 {
+               log.Warn().Uint("task_id", taskID).Str("task", task.Name).Msg("任务已有正在执行的记录，跳过本次触发")
+               return
+       }
+
 
     // 第二步：创建一条执行日志记录
     now := time.Now()
@@ -288,6 +298,16 @@ func (e *Executor) ExecuteTaskWithContext(ctx context.Context, taskID uint) {
         log.Error().Err(err).Uint("task_id", taskID).Msg("fetch task failed")
         return
     }
+       // 防重：同一任务已有未完成执行记录时跳过，防止并发重复执行
+       var runningCount int64
+       e.db.Model(&model.ExecutionLog{}).
+               Where("task_id = ? AND status = ? AND end_time IS NULL", taskID, model.StateRunning).
+               Count(&runningCount)
+       if runningCount > 0 {
+               log.Warn().Uint("task_id", taskID).Str("task", task.Name).Msg("任务已有正在执行的记录，跳过本次触发")
+               return
+       }
+
 
     // 第二步：创建一条执行日志记录
     now := time.Now()
@@ -489,6 +509,11 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
         for _, t := range members {
             wg.Add(1)
             task := t
+                       if task.RunMode == "daemon" {
+                               wg.Done()
+                               log.Info().Str("task", task.Name).Msg("group (parallel): 跳过 daemon 任务")
+                               continue  // daemon 任务由 DaemonMonitor 独立管理，不参与组执行
+                       }
             e.pool.Submit(func() {
                 defer wg.Done()
                 defer func() {
@@ -509,6 +534,10 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
 
     case "sequential":
         for _, t := range members {
+               if t.RunMode == "daemon" {
+                       log.Info().Str("task", t.Name).Msg("group (sequential): 跳过 daemon 任务")
+                       continue  // daemon 任务由 DaemonMonitor 独立管理，不参与组执行
+               }
             e.executeTask(t.ID)
             var lastLog model.ExecutionLog
             e.db.Where("task_id = ?", t.ID).Order("id DESC").First(&lastLog)
@@ -520,6 +549,13 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
         }
         log.Info().Str("group", g.Name).Msg("group (sequential) completed")
         	case "dag":
+               // 构建 daemon 任务集合 — daemon 任务由 DaemonMonitor 独立管理，不参与组执行
+               daemonTaskIDs := make(map[uint]bool)
+               for _, t := range members {
+                       if t.RunMode == "daemon" {
+                               daemonTaskIDs[t.ID] = true
+                       }
+               }
 		dag := e.buildDAG(members)
 		layers := dag.TopologicalSort()
 		layerFailed := false
@@ -535,6 +571,11 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
 			for _, taskID := range layer {
 				wg.Add(1)
 				tid := taskID
+                               if daemonTaskIDs[tid] {
+                                       wg.Done()
+                                       log.Info().Uint("task_id", tid).Msg("group (dag): 跳过 daemon 任务")
+                                       continue  // daemon 任务由 DaemonMonitor 独立管理，不参与组执行
+                               }
 				e.pool.Submit(func() {
 					defer wg.Done()
 					defer func() {

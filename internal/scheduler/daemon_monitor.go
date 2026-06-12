@@ -114,25 +114,17 @@ func (m *DaemonMonitor) Start(ctx context.Context) {
 // StartDaemon 手动启动一个常驻守护任务（供 API 调用）
 // 如果任务已经在运行中，不会重复启动
 func (m *DaemonMonitor) StartDaemon(taskID uint) {
-	m.mu.RLock()
-	if st, exists := m.states[taskID]; exists && (st.Status == DaemonRunning || st.Status == DaemonStarting || st.Status == DaemonBackoff) {
-		m.mu.RUnlock()
-		log.Warn().Uint("task_id", taskID).Str("status", st.Status).Msg("daemon monitor: 任务已在运行中，跳过重复启动")
-		return
-	}
-	m.mu.RUnlock()
+       // 使用已有的 parentCtx 或 background context
+       m.mu.RLock()
+       var parentCtx context.Context
+       if st, exists := m.states[taskID]; exists && st.parentCtx != nil {
+               parentCtx = st.parentCtx
+       } else {
+               parentCtx = context.Background()
+       }
+       m.mu.RUnlock()
 
-	// 使用已有的 parentCtx 或 background context
-	m.mu.RLock()
-	var parentCtx context.Context
-	if st, exists := m.states[taskID]; exists && st.parentCtx != nil {
-		parentCtx = st.parentCtx
-	} else {
-		parentCtx = context.Background()
-	}
-	m.mu.RUnlock()
-
-	m.startDaemonInternal(parentCtx, taskID)
+       m.startDaemonInternal(parentCtx, taskID)
 }
 
 // startDaemonInternal 内部启动守护协程的核心逻辑
@@ -148,20 +140,33 @@ func (m *DaemonMonitor) startDaemonInternal(parentCtx context.Context, taskID ui
 	// 创建该守护任务专属的可取消上下文
 	ctx, cancel := context.WithCancel(parentCtx)
 
-	// 初始化 daemon 状态
-	now := time.Now()
-	m.mu.Lock()
-	m.states[taskID] = &daemonTaskState{
-		DaemonState: DaemonState{
-			Status:             DaemonStarting,
-			RestartCount:       0,
-			MaxRestartAttempts: task.MaxRestartAttempts,
-			LastStartTime:      &now,
-		},
-		cancel:    cancel,
-		parentCtx: parentCtx,
-	}
-	m.mu.Unlock()
+       // 写锁内防重：检查是否已在运行，避免 TOCTOU 竞态
+       // 同时取消旧协程，防止 goroutine 泄漏
+       now := time.Now()
+       m.mu.Lock()
+       if old, exists := m.states[taskID]; exists {
+               if old.Status == DaemonRunning || old.Status == DaemonStarting || old.Status == DaemonBackoff {
+                       m.mu.Unlock()
+                       log.Warn().Uint("task_id", taskID).Str("status", old.Status).Msg("daemon monitor: 任务已在运行中，跳过重复启动")
+                       cancel() // 释放刚创建的 context
+                       return
+               }
+               // 取消旧协程（如果存在），防止 goroutine 泄漏
+               if old.cancel != nil {
+                       old.cancel()
+               }
+       }
+       m.states[taskID] = &daemonTaskState{
+               DaemonState: DaemonState{
+                       Status:             DaemonStarting,
+                       RestartCount:       0,
+                       MaxRestartAttempts: task.MaxRestartAttempts,
+                       LastStartTime:      &now,
+               },
+               cancel:    cancel,
+               parentCtx: parentCtx,
+       }
+       m.mu.Unlock()
 
 	go m.runDaemonLoop(ctx, taskID, &task)
 }
