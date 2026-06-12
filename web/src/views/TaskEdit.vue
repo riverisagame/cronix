@@ -225,8 +225,8 @@
         <el-divider content-position="left">Advanced</el-divider>
         <!-- 用 el-row 把两个设置项并排显示 -->
         <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="Timeout(s)">
+          <el-col :span="12" v-if="form.run_mode !== 'daemon'">
+            <el-form-item label="Timeout(s)" title="Daemon 任务不受此限制">
               <el-input-number v-model="form.timeout_sec" :min="1" :max="3600" style="width:100%" />
             </el-form-item>
           </el-col>
