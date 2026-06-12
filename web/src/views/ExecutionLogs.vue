@@ -77,11 +77,11 @@
         </el-descriptions>
 
         <LogViewer
-          mode="history"
+          :mode="detail.status === 'running' ? 'live' : 'history'"
           :status="detail.status"
-          :logs="(detail.output || '') + (detail.error_msg ? '\n' + detail.error_msg : '')"
+          :logs="(liveOutput || detail.output || '') + (detail.error_msg ? '\n' + detail.error_msg : '')"
           :duration="detail.end_time ? duration(detail.start_time, detail.end_time) : ''"
-          @download="(format) => downloadSingleLog(detail, format)"
+          :taskId="detail.task_id"
         />
       </template>
     </el-drawer>
@@ -92,8 +92,7 @@
 import { ref, reactive, computed, onMounted, h } from 'vue'
 import { ElTableV2, ElTag, ElAutoResizer } from 'element-plus'
 import type { Column } from 'element-plus'
-import { logAPI } from '../api/index'
-import { Search, Refresh } from '@element-plus/icons-vue'
+import { logAPI, taskAPI } from '../api/index'
 import { ElMessage } from 'element-plus'
 import LogViewer from '../components/LogViewer.vue'
 
@@ -109,8 +108,7 @@ const filters = reactive({ task_name:'', status:'', since:'' })
 const drawerVisible = ref(false)
 const detail = ref<any>(null)
 const detailLoading = ref(false)
-
-
+const liveOutput = ref('')  // 运行中任务的实时流输出
 function formatTime(iso: string): string {
   if (!iso) return '-'
   const d = new Date(iso)
@@ -207,12 +205,18 @@ async function showDetail(rowData: any) {
   drawerVisible.value = true
   detail.value = null
   detailLoading.value = true
+  liveOutput.value = ''
   try {
     const r = await logAPI.getLog(rowData.id)
     detail.value = r.data.data
-  } catch {
-    // Fallback: use list row data (no output available)
-    detail.value = rowData
+    // 运行中的任务：拉取实时磁盘日志（DB 中 output 此时为空）
+    if (detail.value?.status === 'running' && detail.value?.task_id) {
+      try {
+        const sr: any = await taskAPI.streamLog(detail.value.task_id, { offset: 0 })
+        const payload = sr.data?.data || {}
+        liveOutput.value = typeof sr.data === 'string' ? sr.data : (payload.content || '')
+      } catch {}
+    }
   } finally { detailLoading.value = false }
 }
 
