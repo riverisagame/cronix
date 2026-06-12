@@ -436,6 +436,16 @@ const getDaemonUptime = (id: number) => {
   return daemonStates.value[id]?.uptime || ''
 }
 
+/** 将 execution_log 的 status 映射为 LogViewer 展示状态 */
+const mapExecStatusToDisplay = (s: string) => {
+  switch (s) {
+    case 'success': return 'STOPPED'
+    case 'failed':  return 'FAILED'
+    case 'timeout': return 'TIMEOUT'
+    case 'cancelled': return 'CANCELLED'
+    default:        return (s || '').toUpperCase()
+  }
+}
 const daemonStatusColor = (status: string) => {
   switch (status) {
     case 'RUNNING': return 'success'
@@ -763,7 +773,7 @@ const startLiveStream = async (id: number) => {
           const logRes: any = await taskAPI.getLogs(id, { page: 1, page_size: 1 })
           const latestLog = logRes?.data?.data?.items?.[0]
           if (latestLog && latestLog.status !== 'running') {
-            liveStatus.value = latestLog.status === 'success' ? 'STOPPED' : latestLog.status.toUpperCase()
+            liveStatus.value = mapExecStatusToDisplay(latestLog.status)
             clearLiveStream()
             loadHistory()
             return
@@ -774,7 +784,7 @@ const startLiveStream = async (id: number) => {
         const logRes: any = await taskAPI.getLogs(id, { page: 1, page_size: 1 })
         const latestLog = logRes?.data?.data?.items?.[0]
         if (latestLog && latestLog.status !== 'running') {
-          liveStatus.value = latestLog.status === 'success' ? 'STOPPED' : latestLog.status.toUpperCase()
+          liveStatus.value = mapExecStatusToDisplay(latestLog.status)
           clearLiveStream()
           loadHistory()
           return

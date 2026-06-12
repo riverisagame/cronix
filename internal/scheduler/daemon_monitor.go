@@ -26,6 +26,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// DaemonState 状态常量
+const (
+    DaemonStopped  = "STOPPED"
+    DaemonStarting = "STARTING"
+    DaemonRunning  = "RUNNING"
+    DaemonBackoff  = "BACKOFF"
+    DaemonFatal    = "FATAL"
+)
+
 // DaemonState 描述常驻守护任务的当前运行状态（对外暴露，供 API 查询）
 type DaemonState struct {
 	// Status 当前状态：STOPPED / STARTING / RUNNING / BACKOFF / FATAL
@@ -92,7 +101,7 @@ func (m *DaemonMonitor) Start(ctx context.Context) {
 // 如果任务已经在运行中，不会重复启动
 func (m *DaemonMonitor) StartDaemon(taskID uint) {
 	m.mu.RLock()
-	if st, exists := m.states[taskID]; exists && (st.Status == "RUNNING" || st.Status == "STARTING" || st.Status == "BACKOFF") {
+	if st, exists := m.states[taskID]; exists && (st.Status == DaemonRunning || st.Status == DaemonStarting || st.Status == DaemonBackoff) {
 		m.mu.RUnlock()
 		log.Warn().Uint("task_id", taskID).Str("status", st.Status).Msg("daemon monitor: 任务已在运行中，跳过重复启动")
 		return
@@ -127,7 +136,7 @@ func (m *DaemonMonitor) startDaemonInternal(parentCtx context.Context, taskID ui
 	now := time.Now()
 	state := &daemonTaskState{
 		DaemonState: DaemonState{
-			Status:             "STARTING",
+			Status:             DaemonStarting,
 			RestartCount:       0,
 			MaxRestartAttempts: task.MaxRestartAttempts,
 			LastStartTime:      &now,
@@ -172,7 +181,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		// 检查上下文是否已被取消（手动 Stop 或全局关闭）
 		select {
 		case <-ctx.Done():
-			m.setStatus(taskID, "STOPPED", "")
+			m.setStatus(taskID, DaemonStopped, "")
 			log.Info().Uint("task_id", taskID).Msg("daemon monitor: 守护协程收到停止信号，退出")
 			return
 		default:
@@ -182,7 +191,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		now := time.Now()
 		m.mu.Lock()
 		if st, ok := m.states[taskID]; ok {
-			st.Status = "RUNNING"
+			st.Status = DaemonRunning
 			st.LastStartTime = &now
 		}
 		m.mu.Unlock()
@@ -209,7 +218,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		// 再次检查 ctx 是否已被取消（手动 Stop）
 		select {
 		case <-ctx.Done():
-			m.setStatus(taskID, "STOPPED", "")
+			m.setStatus(taskID, DaemonStopped, "")
 			log.Info().Uint("task_id", taskID).Msg("daemon monitor: 任务执行期间收到停止信号，退出守护")
 			return
 		default:
@@ -232,7 +241,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		}
 
 		if !shouldRestart {
-			m.setStatus(taskID, "STOPPED", "")
+			m.setStatus(taskID, DaemonStopped, "")
 			log.Info().Uint("task_id", taskID).Str("policy", restartPolicy).Msg("daemon monitor: 重启策略判定不需要重启，守护退出")
 			return
 		}
@@ -246,7 +255,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			}
 			select {
 			case <-ctx.Done():
-				m.setStatus(taskID, "STOPPED", "")
+				m.setStatus(taskID, DaemonStopped, "")
 				log.Info().Uint("task_id", taskID).Msg("daemon monitor: 成功退出后退避期间收到停止信号，退出守护")
 				return
 			case <-time.After(delay):
@@ -257,13 +266,13 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			if latestLog.ErrorMsg != "" {
 				lastErr = latestLog.ErrorMsg
 			}
-			m.setStatus(taskID, "BACKOFF", lastErr)
+			m.setStatus(taskID, DaemonBackoff, lastErr)
 
 			// 检查是否超过最大重启次数 -> FATAL 熔断
 			if restartPolicy != "always" && restartCount >= maxAttempts {
 				m.mu.Lock()
 				if st, ok := m.states[taskID]; ok {
-					st.Status = "FATAL"
+					st.Status = DaemonFatal
 					st.RestartCount = restartCount
 					st.LastError = lastErr
 				}
@@ -297,7 +306,7 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 
 			select {
 			case <-ctx.Done():
-				m.setStatus(taskID, "STOPPED", "")
+				m.setStatus(taskID, DaemonStopped, "")
 				log.Info().Uint("task_id", taskID).Msg("daemon monitor: 退避期间收到停止信号，退出守护")
 				return
 			case <-time.After(backoff):
@@ -320,7 +329,7 @@ func (m *DaemonMonitor) StopDaemon(taskID uint) {
 	if st.cancel != nil {
 		st.cancel()
 	}
-	st.Status = "STOPPED"
+	st.Status = DaemonStopped
 	m.mu.Unlock()
 
 	log.Info().Uint("task_id", taskID).Msg("daemon monitor: 已发送停止信号")
@@ -339,7 +348,7 @@ func (m *DaemonMonitor) GetDaemonState(taskID uint) (DaemonState, bool) {
 
 	result := st.DaemonState
 	// 计算实时运行时长
-	if st.Status == "RUNNING" && st.LastStartTime != nil {
+	if st.Status == DaemonRunning && st.LastStartTime != nil {
 		result.Uptime = time.Since(*st.LastStartTime).Truncate(time.Second).String()
 	}
 	return result, true
@@ -353,7 +362,7 @@ func (m *DaemonMonitor) GetAllDaemonStates() map[uint]DaemonState {
 	result := make(map[uint]DaemonState, len(m.states))
 	for id, st := range m.states {
 		ds := st.DaemonState
-		if st.Status == "RUNNING" && st.LastStartTime != nil {
+		if st.Status == DaemonRunning && st.LastStartTime != nil {
 			ds.Uptime = time.Since(*st.LastStartTime).Truncate(time.Second).String()
 		}
 		result[id] = ds
@@ -392,7 +401,7 @@ func (m *DaemonMonitor) ReloadDaemon(task model.Task) {
 	// 2. 如果任务是 daemon，且原来是启用的（不管什么状态，只要不是 STOPPED 就尝试重启或拉起）
 	// 如果是手动 STOPPED 状态，更新配置不应该自动拉起，除非是从 cron 转成 daemon。
 	// 为了简化，只要处于任何正在重试或运行或熔断状态，更新后都重启。
-	if exists && (st.Status == "RUNNING" || st.Status == "STARTING" || st.Status == "BACKOFF" || st.Status == "FATAL") {
+	if exists && (st.Status == DaemonRunning || st.Status == DaemonStarting || st.Status == DaemonBackoff || st.Status == DaemonFatal) {
 		log.Info().Uint("task_id", task.ID).Msg("daemon monitor: 检测到配置更新，正在热重载守护任务")
 		m.StopDaemon(task.ID)
 		

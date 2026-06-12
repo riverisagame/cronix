@@ -147,7 +147,7 @@ func TestDaemonMonitor_Stop(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	state, exists := monitor.GetDaemonState(task.ID)
-	if !exists || state.Status != "RUNNING" {
+	if !exists || state.Status != DaemonRunning {
 		t.Fatalf("expected task %d to be in RUNNING state, got: %+v", task.ID, state)
 	}
 
@@ -157,7 +157,7 @@ func TestDaemonMonitor_Stop(t *testing.T) {
 	// 验证进程状态是否变成 STOPPED
 	time.Sleep(500 * time.Millisecond)
 	stateAfterStop, existsAfter := monitor.GetDaemonState(task.ID)
-	if !existsAfter || stateAfterStop.Status != "STOPPED" {
+	if !existsAfter || stateAfterStop.Status != DaemonStopped {
 		t.Errorf("expected task %d state to be STOPPED after stop, but got: %+v", task.ID, stateAfterStop)
 	}
 

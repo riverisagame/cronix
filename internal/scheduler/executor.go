@@ -241,7 +241,7 @@ func (e *Executor) executeTask(taskID uint) {
         TaskID:      &task.ID,                                   // 任务ID（指针类型，可以为空）
         TaskName:    task.Name,                                  // 任务名
         CronExpr:    task.CronExpr,                              // Cron表达式
-        Status:      "running",                                  // 初始状态：运行中
+        Status:      model.StateRunning,                                  // 初始状态：运行中
         TriggerType: "cron",                                     // 触发类型：定时触发
         StartTime:   now,                                        // 开始时间
     }
@@ -266,10 +266,10 @@ func (e *Executor) executeTask(taskID uint) {
             execLog.RetryAttempt = attempt                        // 记录重试次数
             time.Sleep(time.Duration(task.RetryIntervalSec) * time.Second) // 等待重试间隔
         }
-        execLog.Status = "running"                                // 重置状态
+        execLog.Status = model.StateRunning                                // 重置状态
         execLog.ErrorMsg = ""                                     // 清空错误信息
         e.runTaskByType(&task, &execLog, timeout)                     // 根据任务类型执行
-        if execLog.Status == "success" {                          // 执行成功，不再重试
+        if execLog.Status == model.StateSuccess {                          // 执行成功，不再重试
             break
         }
     }
@@ -295,7 +295,7 @@ func (e *Executor) ExecuteTaskWithContext(ctx context.Context, taskID uint) {
         TaskID:      &task.ID,
         TaskName:    task.Name,
         CronExpr:    task.CronExpr,
-        Status:      "running",
+        Status:      model.StateRunning,
         TriggerType: "daemon",
         StartTime:   now,
     }
@@ -329,10 +329,10 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
         // Shell任务：在操作系统命令行中执行一条命令
         result := executor.ExecuteShell(ctx, task.Command, task.WorkDir, timeoutSec, task.RunAs, task.ID)
         if result.Error != nil {
-            execLog.Status = "failed"
+            execLog.Status = model.StateFailed
             execLog.ErrorMsg = result.Error.Error()
         } else {
-            execLog.Status = "success"
+            execLog.Status = model.StateSuccess
         }
         execLog.ExitCode = &result.ExitCode                      // 记录命令的退出码（0=成功）
         execLog.Output = truncate(result.Output, truncateKB)     // 截断过长的输出
@@ -344,13 +344,13 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
             timeoutSec, e.cfg.CircuitBreaker.FailureThreshold,
             e.cfg.CircuitBreaker.CooldownSeconds)
         if result.Error != nil {
-            execLog.Status = "failed"
+            execLog.Status = model.StateFailed
             execLog.ErrorMsg = result.Error.Error()
         } else if result.StatusCode >= 400 {                     // HTTP状态码>=400表示请求失败
-            execLog.Status = "failed"
+            execLog.Status = model.StateFailed
             execLog.ErrorMsg = fmt.Sprintf("HTTP %d", result.StatusCode)
         } else {
-            execLog.Status = "success"
+            execLog.Status = model.StateSuccess
         }
         code := result.StatusCode
         execLog.ExitCode = &code
@@ -360,10 +360,10 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
         // 清理任务：删除指定目录下符合条件的旧文件
         result := executor.ExecuteCleanup(ctx, task.Command)     // task.Command存放的是JSON配置
         if result.Error != nil {
-            execLog.Status = "failed"
+            execLog.Status = model.StateFailed
             execLog.ErrorMsg = result.Error.Error()
         } else {
-            execLog.Status = "success"
+            execLog.Status = model.StateSuccess
             execLog.Output = fmt.Sprintf("Deleted %d files", result.DeletedCount) // 输出删除了多少个文件
         }
         code := 0
@@ -373,10 +373,10 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
         // 健康检查任务：访问一个URL，检查服务是否正常
         result := executor.ExecuteHealthCheck(ctx, task.HTTPURL, timeoutSec)
         if result.Error != nil {
-            execLog.Status = "failed"
+            execLog.Status = model.StateFailed
             execLog.ErrorMsg = result.Error.Error()
         } else {
-            execLog.Status = "success"
+            execLog.Status = model.StateSuccess
         }
         code := result.StatusCode
         execLog.ExitCode = &code
@@ -384,7 +384,7 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
 
 	default:
 		// 未知的任务类型，标记为失败
-		execLog.Status = "failed"
+		execLog.Status = model.StateFailed
 		execLog.ErrorMsg = fmt.Sprintf("unknown task type: %s", task.TaskType)
 	}
 
@@ -393,7 +393,7 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
 
 	// @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05
 	duration := now.Sub(execLog.StartTime).Milliseconds()
-	GlobalMetricsRegistry.RecordExecution(duration, execLog.Status == "success")
+	GlobalMetricsRegistry.RecordExecution(duration, execLog.Status == model.StateSuccess)
 
 	e.db.Save(execLog)                                           // 把执行结果保存到数据库
     
@@ -434,8 +434,8 @@ func (e *Executor) notifyTaskResult(task *model.Task, execLog *model.ExecutionLo
     e.db.Where("task_id = ?", task.ID).Find(&notifies)
     for _, n := range notifies {                                 // 遍历每条通知配置
         // 判断是否需要通知：成功且配置了成功通知，或者失败且配置了失败通知
-        shouldNotify := (execLog.Status == "success" && n.OnSuccess) ||
-            (execLog.Status == "failed" && n.OnFailure)
+        shouldNotify := (execLog.Status == model.StateSuccess && n.OnSuccess) ||
+            (execLog.Status == model.StateFailed && n.OnFailure)
         if !shouldNotify {
             continue
         }
@@ -473,7 +473,7 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
         Mode:        g.Mode,
         TriggerType: triggerType,
         MemberCount: len(members),
-        Status:      "running",
+        Status:      model.StateRunning,
         StartTime:   now,
     }
     e.db.Create(&glog)
@@ -500,7 +500,7 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
                 var lastLog model.ExecutionLog
                 e.db.Where("task_id = ?", task.ID).Order("id DESC").First(&lastLog)
                 mu.Lock()
-                if lastLog.Status == "success" { success++ } else { failed++ }
+                if lastLog.Status == model.StateSuccess { success++ } else { failed++ }
                 mu.Unlock()
             })
         }
@@ -512,8 +512,8 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
             e.executeTask(t.ID)
             var lastLog model.ExecutionLog
             e.db.Where("task_id = ?", t.ID).Order("id DESC").First(&lastLog)
-            if lastLog.Status == "success" { success++ } else { failed++; errMsg = lastLog.ErrorMsg }
-            if lastLog.Status == "failed" {
+            if lastLog.Status == model.StateSuccess { success++ } else { failed++; errMsg = lastLog.ErrorMsg }
+            if lastLog.Status == model.StateFailed {
                 log.Warn().Str("group", g.Name).Str("task", t.Name).Msg("group (sequential) stopped due to failure")
                 break
             }
@@ -548,7 +548,7 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
 					e.db.Where("task_id = ?", tid).Order("id DESC").First(&lastLog)
 					
 					mu.Lock()
-					if lastLog.Status == "success" {
+					if lastLog.Status == model.StateSuccess {
 						success++
 					} else {
 						failed++

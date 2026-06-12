@@ -8,10 +8,10 @@ func TestExecutionLogStateTransition(t *testing.T) {
 	log := &ExecutionLog{Status: "pending"}
 
 	// pending -> running (should pass)
-	if err := log.TransitionTo("running"); err != nil {
+	if err := log.TransitionTo(StateRunning); err != nil {
 		t.Errorf("Expected transition to running to succeed, got %v", err)
 	}
-	if log.Status != "running" {
+	if log.Status != StateRunning {
 		t.Errorf("Expected status to be running, got %s", log.Status)
 	}
 
@@ -24,7 +24,7 @@ func TestExecutionLogStateTransition(t *testing.T) {
 	}
 
 	// success -> running (should fail, terminal state)
-	if err := log.TransitionTo("running"); err == nil {
+	if err := log.TransitionTo(StateRunning); err == nil {
 		t.Errorf("Expected transition to running from success to fail")
 	}
 

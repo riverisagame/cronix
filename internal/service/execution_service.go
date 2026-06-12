@@ -177,10 +177,10 @@ func (s *ExecutionService) GetDashboardStats() (map[string]interface{}, error) {
     s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ?", today).Count(&todayTotal)
 
     var todaySuccess int64
-    s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ? AND status = ?", today, "success").Count(&todaySuccess)
+    s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ? AND status = ?", today, model.StateSuccess).Count(&todaySuccess)
 
     var todayFailed int64
-    s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ? AND status = ?", today, "failed").Count(&todayFailed)
+    s.DB.Model(&model.ExecutionLog{}).Where("start_time >= ? AND status = ?", today, model.StateFailed).Count(&todayFailed)
 
 	stats := map[string]interface{}{
 		"total_tasks":   totalTasks,

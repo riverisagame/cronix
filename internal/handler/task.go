@@ -343,7 +343,7 @@ func (h *TaskHandler) GetDaemonStatus(c *gin.Context) {
     }
     state, exists := h.DaemonMon.GetDaemonState(uint(id))
     if !exists {
-        c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"status": "STOPPED"}})
+        c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"status": scheduler.DaemonStopped}})
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": state})
