@@ -46,7 +46,7 @@ test.describe('Tasks', () => {
     
     // UI now opens the drawer immediately on run. 
     // We should expect the drawer to be visible instead of double clicking.
-    await expect(page.locator('.el-drawer').locator('.terminal-body')).toBeVisible()
+    await expect(page.locator('.el-drawer').locator('.terminal-header')).toBeVisible()
     
     // Close the drawer by clicking the close button
     await page.locator('.el-drawer__close-btn').click()
@@ -63,7 +63,7 @@ test.describe('Tasks', () => {
     await page.locator('.el-tabs__item', { hasText: 'Live Console' }).click()
     
     // It should have the shared terminal body
-    await expect(page.locator('.el-drawer').locator('.terminal-body')).toBeVisible()
+    await expect(page.locator('.el-drawer').locator('.terminal-header')).toBeVisible()
     // It should have a fullscreen button
     await expect(page.locator('.el-drawer').locator('[data-testid="btn-fullscreen"]')).toBeVisible()
     await page.locator('.el-drawer__close-btn').click()

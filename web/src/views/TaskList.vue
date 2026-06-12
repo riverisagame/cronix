@@ -852,12 +852,13 @@ async function runTask(row: any) {
   logTaskName.value = row.name
   historyTaskId.value = row.id
   historyTaskMode.value = row.run_mode || '' // cron 手动触发
+  activeTab.value = 'live'
   drawerVisible.value = true           // 立即弹出面板，展示流
 
   try {
     await taskAPI.run(row.id)            // 调用 API：POST /tasks/{id}/run
     ElMessage.success('Triggered')      // 弹出绿色成功提示："已触发"
-    startLiveStream(row.id)             // 开始轮询日志
+    // startLiveStream 由 watch(activeTab) 自动触发，此处不重复调用
   } catch (e: any) {
     ElMessage.error('Failed to trigger')
   } finally {
