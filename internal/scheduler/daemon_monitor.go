@@ -32,6 +32,8 @@ type DaemonState struct {
 	Status string `json:"status"`
 	// RestartCount 连续重启失败次数（成功执行后归零）
 	RestartCount int `json:"restart_count"`
+	// MaxRestartAttempts daemon 任务配置的最大重试次数（来自 Task 模型）
+	MaxRestartAttempts int `json:"max_restart_attempts"`
 	// LastError 最后一次执行的错误信息
 	LastError string `json:"last_error,omitempty"`
 	// LastStartTime 最后一次启动时间
@@ -125,9 +127,10 @@ func (m *DaemonMonitor) startDaemonInternal(parentCtx context.Context, taskID ui
 	now := time.Now()
 	state := &daemonTaskState{
 		DaemonState: DaemonState{
-			Status:        "STARTING",
-			RestartCount:  0,
-			LastStartTime: &now,
+			Status:             "STARTING",
+			RestartCount:       0,
+			MaxRestartAttempts: task.MaxRestartAttempts,
+			LastStartTime:      &now,
 		},
 		cancel:    cancel,
 		parentCtx: parentCtx,

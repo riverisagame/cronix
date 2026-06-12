@@ -107,6 +107,12 @@
             <template v-if="row.run_mode === 'daemon'">
               <el-tag :type="daemonStatusColor(getDaemonStatus(row.id))">{{ getDaemonStatus(row.id) }}</el-tag>
               <div v-if="getDaemonStatus(row.id) === 'RUNNING'" style="font-size:12px;color:var(--text-secondary);margin-top:2px">Up: {{ getDaemonUptime(row.id) }}</div>
+              <div v-if="getDaemonStatus(row.id) === 'BACKOFF'" style="font-size:12px;color:var(--warning-color);margin-top:2px">
+                Retries: {{ getDaemonRestartInfo(row.id) }}
+              </div>
+              <div v-if="getDaemonStatus(row.id) === 'FATAL'" style="font-size:12px;color:var(--danger-color);margin-top:2px">
+                Retries: {{ getDaemonRestartInfo(row.id) }} (max)
+              </div>
             </template>
             <template v-else>
               <!-- 用 el-tag 标签显示 Cron 表达式，type="info" 灰色标签 -->
@@ -414,6 +420,15 @@ const fetchDaemonStates = async () => {
   }
 }
 
+const getDaemonRestartInfo = (id: number) => {
+  const st = daemonStates.value[id]
+  if (!st) return ''
+  const current = st.restart_count ?? 0
+  const max = st.max_restart_attempts ?? 0
+  if (current <= 0) return ''
+  return max > 0 ? `${current}/${max}` : `${current}`
+}
+
 const getDaemonStatus = (id: number) => {
   return daemonStates.value[id]?.status || 'STOPPED'
 }
@@ -688,6 +703,8 @@ const activeTab = ref('history')
 const liveLogs = ref('')
 const liveStatus = ref('STOPPED') // RUNNING, STOPPED, ERROR
 let liveStreamTimer: any = null
+const liveLogOffset = ref(0)
+const historyTaskMode = ref('')
 
 // 清除流轮询
 const clearLiveStream = () => {
@@ -702,26 +719,67 @@ const onDrawerClose = () => {
   clearLiveStream()
 }
 
-// 获取日志流
+// 获取日志流（daemon 感知 + offset 增量）
 const startLiveStream = async (id: number) => {
   liveLogs.value = ''
+  liveLogOffset.value = 0
   liveStatus.value = 'RUNNING'
   liveStartTime.value = Date.now()
   liveDuration.value = 0
   clearLiveStream()
-  
+
+  const isDaemon = historyTaskMode.value === 'daemon'
+
   const fetchLogs = async () => {
     try {
       liveDuration.value = Math.floor((Date.now() - liveStartTime.value) / 1000)
-      const res: any = await taskAPI.streamLog(id)
-      liveLogs.value = typeof res.data === 'string' ? res.data : (res.data?.data?.output || '')
-      
-      const logRes: any = await taskAPI.getLogs(id, { page: 1, page_size: 1 })
-      const latestLog = logRes?.data?.data?.items?.[0]
-      if (latestLog && latestLog.status !== 'running') {
-        liveStatus.value = latestLog.status === 'success' ? 'STOPPED' : latestLog.status.toUpperCase()
-        clearLiveStream()
-        loadHistory()
+      const res: any = await taskAPI.streamLog(id, { offset: liveLogOffset.value })
+      const payload = res.data?.data || {}
+      // 兼容旧格式（纯文本）和新格式（结构化 JSON）
+      const newContent = typeof res.data === 'string' ? res.data : (payload.content || payload.output || '')
+      const newSize: number = payload.size || 0
+
+      if (newContent) {
+        liveLogs.value += newContent
+      }
+      if (newSize > 0) {
+        liveLogOffset.value = newSize
+      }
+
+      if (isDaemon) {
+        // Daemon 任务：用 daemon 状态判定是否继续轮询
+        const ds = payload.daemon
+        if (ds) {
+          const s = ds.status
+          if (s === 'STOPPED' || s === 'FATAL') {
+            liveStatus.value = s
+            clearLiveStream()
+            loadHistory()
+            return
+          }
+          // RUNNING / STARTING / BACKOFF → 继续轮询
+          liveStatus.value = 'RUNNING'
+        } else {
+          // daemon mon 不可用或任务不在管理中，退回到 execution_log 检查
+          const logRes: any = await taskAPI.getLogs(id, { page: 1, page_size: 1 })
+          const latestLog = logRes?.data?.data?.items?.[0]
+          if (latestLog && latestLog.status !== 'running') {
+            liveStatus.value = latestLog.status === 'success' ? 'STOPPED' : latestLog.status.toUpperCase()
+            clearLiveStream()
+            loadHistory()
+            return
+          }
+        }
+      } else {
+        // 非 daemon 任务：检查最新执行日志状态
+        const logRes: any = await taskAPI.getLogs(id, { page: 1, page_size: 1 })
+        const latestLog = logRes?.data?.data?.items?.[0]
+        if (latestLog && latestLog.status !== 'running') {
+          liveStatus.value = latestLog.status === 'success' ? 'STOPPED' : latestLog.status.toUpperCase()
+          clearLiveStream()
+          loadHistory()
+          return
+        }
       }
     } catch(e) {
       liveStatus.value = 'ERROR'
@@ -729,9 +787,9 @@ const startLiveStream = async (id: number) => {
       clearLiveStream()
     }
   }
-  
+
   await fetchLogs()
-  liveStreamTimer = setInterval(fetchLogs, 1500)
+  liveStreamTimer = setInterval(fetchLogs, 800)
 }
 
 // 杀掉任务
@@ -793,7 +851,7 @@ async function runTask(row: any) {
   runningId.value = row.id             // 标记：这个任务正在被触发
   logTaskName.value = row.name
   historyTaskId.value = row.id
-  activeTab.value = 'live'
+  historyTaskMode.value = row.run_mode || '' // cron 手动触发
   drawerVisible.value = true           // 立即弹出面板，展示流
 
   try {
@@ -838,8 +896,8 @@ async function toggleTask(row: any, val: boolean) {
 async function showLogs(row: any) {
   logTaskName.value = row.name      // 记住任务名（抽屉标题用）
   historyTaskId.value = row.id
+  historyTaskMode.value = row.run_mode || ''
   historyPage.value = 1
-  activeTab.value = 'history'       // 默认展示历史记录
   drawerVisible.value = true        // 打开抽屉
   await loadHistory()
 }
@@ -851,6 +909,15 @@ async function loadHistory() {
   taskLogs.value = r.data.data.items || []  // 把日志列表存起来
   historyTotal.value = r.data.data.total || 0
 }
+
+// 用户切换到 Live Console 标签时自动启动轮询
+watch(activeTab, (val) => {
+  if (val === 'live' && historyTaskId.value) {
+    startLiveStream(historyTaskId.value)
+  } else if (val !== 'live') {
+    clearLiveStream()
+  }
+})
 
 /**
  * onMounted(load)：页面加载完成后，立刻执行 load() 函数。

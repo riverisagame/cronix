@@ -6,6 +6,7 @@ package handler
 
 import (
     "fmt"
+    "io"
     "net/http"     // 网络请求：HTTP状态码定义
     "os"
     "path/filepath"
@@ -373,17 +374,48 @@ func (h *TaskHandler) KillTask(c *gin.Context) {
 }
 
 // StreamTaskLog 流式获取正在执行中的任务日志
-// 路由：GET /api/tasks/:id/stream
+// 路由：GET /api/tasks/:id/stream?offset=N
+// offset: 从第 N 字节开始读取（0=全量），用于增量轮询
+// 响应包含 daemon 状态快照（仅当任务受 DaemonMonitor 管理时）
 func (h *TaskHandler) StreamTaskLog(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-    
+    offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+
     logPath := filepath.Join("data", "logs", fmt.Sprintf("exec_%d.log", id))
-    
-    content, err := os.ReadFile(logPath)
+
+    fi, err := os.Stat(logPath)
     if err != nil {
         c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "log stream not found"})
         return
     }
-    
-    c.String(http.StatusOK, string(content))
+    fileSize := fi.Size()
+
+    var content string
+    if offset < fileSize {
+        f, ferr := os.Open(logPath)
+        if ferr != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "failed to open log"})
+            return
+        }
+        defer f.Close()
+        if offset > 0 {
+            f.Seek(offset, 0)
+        }
+        data, _ := io.ReadAll(f)
+        content = string(data)
+    }
+
+    payload := gin.H{
+        "content": content,
+        "size":    fileSize,
+    }
+
+    // 注入 daemon 状态快照（若存在）
+    if h.DaemonMon != nil {
+        if state, exists := h.DaemonMon.GetDaemonState(uint(id)); exists {
+            payload["daemon"] = state
+        }
+    }
+
+    c.JSON(http.StatusOK, gin.H{"code": 0, "data": payload})
 }

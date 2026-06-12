@@ -64,7 +64,7 @@
         </el-form-item>
 
         <!-- 常驻任务特有字段：Max Restart Attempts -->
-        <el-form-item label="Max Retries" v-if="form.run_mode === 'daemon'">
+        <el-form-item label="Max Restart Attempts" v-if="form.run_mode === 'daemon'">
           <el-input-number v-model="form.max_restart_attempts" :min="0" :max="100" />
           <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 means unlimited</span>
         </el-form-item>
