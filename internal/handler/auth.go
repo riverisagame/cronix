@@ -54,7 +54,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
     // 第一步：解析前端发来的JSON数据，放入LoginRequest结构体
     var req LoginRequest                                    // 声明一个变量，用来存放解析后的请求数据
     if err := c.ShouldBindJSON(&req); err != nil {          // 尝试把请求中的JSON数据绑定到req变量
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "invalid request"}) // 如果格式不对，返回400错误
+        respondError(c, http.StatusBadRequest, "invalid request") // 如果格式不对，返回400错误
         return                                              // 停止处理
     }
 
@@ -78,7 +78,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
         w.count++                          // 如果不是第一次且在时间窗口内，把尝试次数加1
         if w.count > maxLoginAttempts {    // 如果尝试次数超过了最大允许值（5次）
             loginMu.Unlock()               // 先解锁，再返回错误
-            c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "message": "too many login attempts, try again later"}) // 返回429：请求过多
+            respondError(c, http.StatusTooManyRequests, "too many login attempts, try again later") // 返回429：请求过多
             return                         // 停止处理
         }
     }
@@ -87,7 +87,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
     // 第四步：验证用户名是否正确
     // config.AppConfig.Auth.Username 是从配置文件里读取的管理员用户名
     if req.Username != config.AppConfig.Auth.Username {    // 比较用户输入和配置中的用户名
-        c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "invalid username or password"}) // 用户名不对，返回401
+        respondError(c, http.StatusUnauthorized, "invalid username or password") // 用户名不对，返回401
         return
     }
 
@@ -95,7 +95,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
     // config.AppConfig.Auth.Password 是配置文件里存储的加密密码（不是明文！）
     // bcrypt.CompareHashAndPassword 会用加密算法比对用户输入的明文密码和存储的密文
     if err := bcrypt.CompareHashAndPassword([]byte(config.AppConfig.Auth.Password), []byte(req.Password)); err != nil {
-        c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "invalid username or password"}) // 密码不对，返回401
+        respondError(c, http.StatusUnauthorized, "invalid username or password") // 密码不对，返回401
         return
     }
 
@@ -111,7 +111,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
     // SignedString 把令牌内容用密钥加密，生成一个字符串
     tokenString, err := token.SignedString([]byte(config.GetJWTSecret())) // GetJWTSecret()返回配置文件中的加密密钥
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "failed to generate token"}) // 签名失败，服务器内部错误
+        respondError(c, http.StatusInternalServerError, "failed to generate token") // 签名失败，服务器内部错误
         return
     }
 

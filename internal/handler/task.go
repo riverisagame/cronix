@@ -102,7 +102,7 @@ func (h *TaskHandler) ListTasks(c *gin.Context) {
     // 调用服务层查询任务数据，返回任务列表和总数量
     tasks, total, err := h.TaskSvc.ListTasks(page, pageSize, search)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()}) // 查询出错，返回500
+        respondError(c, http.StatusInternalServerError, err.Error()) // 查询出错，返回500
         return
     }
     // 查询成功，返回任务列表和总数
@@ -144,7 +144,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)           // 把字符串ID转成64位无符号整数
     task, err := h.TaskSvc.GetTask(uint(id))                    // 调用服务层查询任务
     if err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "task not found"}) // 任务不存在，返回404
+        respondError(c, http.StatusNotFound, "task not found") // 任务不存在，返回404
         return
     }
     // 安全处理：如果任务配置了HTTP认证信息，用***替换，防止泄露密码
@@ -213,7 +213,7 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 func (h *TaskHandler) DeleteTask(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)           // 获取要删除的任务ID
     if err := h.TaskSvc.DeleteTask(uint(id)); err != nil {       // 调用服务层删除任务
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+        respondError(c, http.StatusInternalServerError, err.Error())
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})    // 删除成功
@@ -239,7 +239,7 @@ func (h *TaskHandler) GetTaskLogs(c *gin.Context) {
     // 调用执行服务查询日志
     logs, total, err := h.ExecSvc.GetTaskLogs(uint(id), page, pageSize, status)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+        respondError(c, http.StatusInternalServerError, err.Error())
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"items": logs, "total": total}})
@@ -252,7 +252,7 @@ func (h *TaskHandler) GetTaskDeps(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)           // 获取任务ID
     deps, err := h.TaskSvc.GetTaskDeps(uint(id))                // 查询该任务的依赖关系
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+        respondError(c, http.StatusInternalServerError, err.Error())
         return
     }
     c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": deps}) // 返回依赖列表
@@ -283,7 +283,7 @@ func (h *TaskHandler) GetTaskNotify(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	cfg, err := h.TaskSvc.GetTaskNotify(uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": cfg})
@@ -298,7 +298,7 @@ func (h *TaskHandler) UpdateTaskNotify(c *gin.Context) {
 		return
 	}
 	if err := h.TaskSvc.UpdateTaskNotify(uint(id), &cfg); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": cfg})

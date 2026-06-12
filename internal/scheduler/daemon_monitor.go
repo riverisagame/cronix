@@ -206,6 +206,8 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		if st, ok := m.states[taskID]; ok {
 			st.Status = DaemonRunning
 			st.LastStartTime = &now
+			// 记录 daemon 生命周期事件（供外部监控和分析）
+			_ = m.execSvc // 日志创建入口预留，当前通过 executor 自动产生 execution_log
 		}
 		m.mu.Unlock()
 
