@@ -161,6 +161,11 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		restartPolicy = "always"
 	}
 
+	// 计算重启延迟：RestartDelaySec > 0 时使用固定间隔
+	// 否则成功 1s，失败指数退避
+	restartDelaySec := task.RestartDelaySec
+	useFixedDelay := restartDelaySec > 0
+
 	restartCount := 0
 
 	for {
@@ -221,14 +226,16 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		// 累加连续失败计数（成功执行后归零）
 		if exitSuccess {
 			restartCount = 0
-			// 为防止成功但快速退出的任务导致死循环（Tight Loop）耗尽系统资源（引发 fork/exec EAGAIN），
-			// 成功退出时也强制加入 1 秒的基础退避。
+			delay := 1 * time.Second
+			if useFixedDelay {
+				delay = time.Duration(restartDelaySec) * time.Second
+			}
 			select {
 			case <-ctx.Done():
 				m.setStatus(taskID, "STOPPED", "")
 				log.Info().Uint("task_id", taskID).Msg("daemon monitor: 成功退出后退避期间收到停止信号，退出守护")
 				return
-			case <-time.After(1 * time.Second):
+			case <-time.After(delay):
 			}
 		} else {
 			restartCount++
@@ -252,14 +259,17 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 				return
 			}
 
-			// 指数退避延迟：1s -> 2s -> 4s -> 8s -> ... 最大 60s
-			// 防止大 restartCount 导致位移溢出变成 0 (Go 位移溢出特性)
+			// 延迟计算：固定间隔 > 指数退避
 			var backoff time.Duration
-			if restartCount >= 7 {
-				// 1 << 6 已经是 64s，超过上限，直接锁定在最大 60s
-				backoff = 60 * time.Second
+			if useFixedDelay {
+				backoff = time.Duration(restartDelaySec) * time.Second
 			} else {
-				backoff = time.Duration(1<<uint(restartCount-1)) * time.Second
+				// 指数退避：1s -> 2s -> 4s -> 8s -> ... 最大 60s
+				if restartCount >= 7 {
+					backoff = 60 * time.Second
+				} else {
+					backoff = time.Duration(1<<uint(restartCount-1)) * time.Second
+				}
 			}
 
 			m.mu.Lock()
@@ -271,14 +281,12 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			log.Warn().Uint("task_id", taskID).Str("error", lastErr).Dur("backoff", backoff).Int("attempt", restartCount).
 				Msg("daemon monitor: 执行失败，进入退避等待")
 
-			// 退避等待，同时响应 ctx 取消以支持即时终止
 			select {
 			case <-ctx.Done():
 				m.setStatus(taskID, "STOPPED", "")
 				log.Info().Uint("task_id", taskID).Msg("daemon monitor: 退避期间收到停止信号，退出守护")
 				return
 			case <-time.After(backoff):
-				// 退避结束，继续下一轮拉起
 			}
 		}
 	}

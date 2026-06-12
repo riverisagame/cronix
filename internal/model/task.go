@@ -161,6 +161,10 @@ type Task struct {
     // 默认值 10 次
     MaxRestartAttempts int `gorm:"default:10" json:"max_restart_attempts,omitempty"`
 
+    // RestartDelaySec 重启延迟秒数（仅 daemon 模式生效）
+    // 0 = 使用内置退避策略（成功 1s，失败指数退避 1s→60s）
+    // > 0 = 每次重启前固定等待该秒数（成功和失败均适用）
+    RestartDelaySec int `gorm:"default:0" json:"restart_delay_sec,omitempty"`
     // WorkDir 工作目录（shell 任务在哪个文件夹下面执行）
     // 比如指定为 "/home/user/scripts"，执行命令时会先切换到这个目录
     // 选填，不写就在当前目录下执行

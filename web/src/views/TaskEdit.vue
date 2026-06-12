@@ -69,6 +69,11 @@
           <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 means unlimited</span>
         </el-form-item>
 
+        <!-- 常驻任务特有字段：Restart Delay -->
+        <el-form-item label="Restart Delay(s)" v-if="form.run_mode === 'daemon'">
+          <el-input-number v-model="form.restart_delay_sec" :min="0" :max="86400" />
+          <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 = auto backoff (1s~60s)</span>
+        </el-form-item>
         <!--
           Cron 表达式（必填项）
           Cron 是一种时间调度语法：5 个字段分别表示分、时、日、月、星期
@@ -319,8 +324,7 @@ const saving = ref(false)
  *   work_dir: Shell 命令的工作目录（空）
  *   timeout_sec: 超时时间，默认 300 秒（5 分钟）
  *   retry_count: 失败重试次数，默认 0
- *   retry_interval_sec: 重试间隔秒数，默认 10
- *   max_concurrent: 最大并发执行数，默认 1
+const form = ref<any>({ name:'', run_mode:'cron', restart_policy:'always', max_restart_attempts:10, restart_delay_sec:0, cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'root', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
  *   enabled: 是否启用，默认 true（启用）
  *   description: 任务描述（空）
  */
