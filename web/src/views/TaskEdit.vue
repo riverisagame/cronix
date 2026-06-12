@@ -54,37 +54,7 @@
           </el-radio-group>
         </el-form-item>
 
-        <!-- 常驻任务特有字段：Restart Policy -->
-        <el-form-item label="Restart Policy" v-if="form.run_mode === 'daemon'">
-          <el-select v-model="form.restart_policy" style="width:200px">
-            <el-option label="Always" value="always" />
-            <el-option label="On Failure" value="on-failure" />
-            <el-option label="Never" value="never" />
-          </el-select>
-        </el-form-item>
-
-        <!-- 常驻任务特有字段：Max Restart Attempts -->
-        <el-form-item label="Max Restart Attempts" v-if="form.run_mode === 'daemon'">
-          <el-input-number v-model="form.max_restart_attempts" :min="0" :max="100" />
-          <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 means unlimited</span>
-        </el-form-item>
-
-        <!-- 常驻任务特有字段：Restart Delay -->
-        <el-form-item label="Restart Delay(s)" v-if="form.run_mode === 'daemon'">
-          <el-input-number v-model="form.restart_delay_sec" :min="0" :max="86400" />
-          <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 = auto backoff (1s~60s)</span>
-        </el-form-item>
-
-        <!-- 常驻任务特有字段：Scheduled Restart -->
-        <el-form-item label="Scheduled Restart(s)" v-if="form.run_mode === 'daemon'">
-          <el-input-number v-model="form.scheduled_restart_sec" :min="0" :max="86400" />
-          <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 = never, >0 = force restart every N seconds</span>
-        </el-form-item>
-          Cron 表达式（必填项）
-          Cron 是一种时间调度语法：5 个字段分别表示分、时、日、月、星期
-          例如 "0 30 8 * * *" 表示每天上午 8:30 执行
-          星号 * 表示"每一个"（每天、每月等）
-        -->
+        <!-- 仅 cron 模式显示 Cron 表达式（daemon 的调度字段在 Daemon Configuration 区） -->
         <el-form-item label="Cron Expression" v-if="form.run_mode === 'cron'">
           <el-input v-model="form.cron_expr" placeholder="0 30 8 * * *（留空由任务组触发或手动执行）" data-testid="task-form-cron"
             @input="onCronInput" />
@@ -117,11 +87,38 @@
           </div>
         </el-form-item>
 
-        <!--
-          任务类型：单选按钮组
-          el-radio-group 包裹多个 el-radio-button
-          v-model="form.task_type" 绑定的值变化时，选中按钮自动更新
-        -->
+        <!-- ======== Daemon Configuration ======== -->
+        <template v-if="form.run_mode === 'daemon'">
+          <el-divider content-position="left">Daemon Configuration</el-divider>
+
+          <el-form-item label="Restart Policy">
+            <el-select v-model="form.restart_policy" style="width:200px">
+              <el-option label="Always" value="always" />
+              <el-option label="On Failure" value="on-failure" />
+              <el-option label="Never" value="never" />
+            </el-select>
+          </el-form-item>
+
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="Max Restart Attempts">
+                <el-input-number v-model="form.max_restart_attempts" :min="0" :max="100" />
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">0 = unlimited</div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="Restart Delay(s)">
+                <el-input-number v-model="form.restart_delay_sec" :min="0" :max="86400" />
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">0 = auto backoff (1s–60s)</div>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-form-item label="Scheduled Restart(s)">
+            <el-input-number v-model="form.scheduled_restart_sec" :min="0" :max="86400" />
+            <span style="margin-left:10px;font-size:12px;color:var(--text-secondary)">0 = never, >0 = force restart every N seconds</span>
+          </el-form-item>
+        </template>
         <el-form-item label="Task Type">
           <el-radio-group v-model="form.task_type" data-testid="task-form-type">
             <el-radio-button value="shell">Shell</el-radio-button>

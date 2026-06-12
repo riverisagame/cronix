@@ -105,15 +105,13 @@
         <el-table-column label="Cron / Mode" width="160">
           <template #default="{ row }">
             <template v-if="row.run_mode === 'daemon'">
-              <el-tag :type="daemonStatusColor(getDaemonStatus(row.id))">{{ getDaemonStatus(row.id) }}</el-tag>
-              <div v-if="getDaemonStatus(row.id) === 'RUNNING'" style="font-size:12px;color:var(--text-secondary);margin-top:2px">Up: {{ getDaemonUptime(row.id) }}</div>
-              <div v-if="getDaemonStatus(row.id) === 'BACKOFF'" style="font-size:12px;color:var(--warning-color);margin-top:2px">
-                Retries: {{ getDaemonRestartInfo(row.id) }}
+              <el-tag :type="daemonStatusColor(getDaemonStatus(row.id))" :class="{'daemon-running-tag': getDaemonStatus(row.id) === 'RUNNING'}">{{ getDaemonStatus(row.id) }}</el-tag>
+              <div v-if="getDaemonStatus(row.id) === 'BACKOFF'" style="margin-top:3px">
+                <span class="retry-info warning">↻ {{ getDaemonRestartInfo(row.id) }}</span>
               </div>
-              <div v-if="getDaemonStatus(row.id) === 'FATAL'" style="font-size:12px;color:var(--danger-color);margin-top:2px">
-                Retries: {{ getDaemonRestartInfo(row.id) }} (max)
+              <div v-if="getDaemonStatus(row.id) === 'FATAL'" style="margin-top:3px">
+                <span class="retry-info danger">✕ {{ getDaemonRestartInfo(row.id) }}</span>
               </div>
-            </template>
             <template v-else>
               <!-- 用 el-tag 标签显示 Cron 表达式，type="info" 灰色标签 -->
               <el-tag type="info">{{ row.cron_expr || 'None' }}</el-tag>
@@ -1194,7 +1192,38 @@ onUnmounted(() => {
   color: #fff;
   padding: 0 2px;
   border-radius: 2px;
+
+/* Daemon RUNNING status pulse */
+@keyframes daemon-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50% { opacity: 0.85; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
 }
 
+.daemon-running-tag {
+  animation: daemon-pulse 2s ease-in-out infinite;
+}
 
+/* 表格行 hover 增强 */
+:deep(.el-table__body tr:hover > td) {
+  box-shadow: inset 0 0 0 1px var(--primary-color);
+  transition: box-shadow 0.15s ease;
+}
+
+/* Retries 信息标签 */
+.retry-info {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.retry-info.warning {
+  background: rgba(230, 162, 60, 0.15);
+  color: var(--warning-color);
+}
+.retry-info.danger {
+  background: rgba(245, 108, 108, 0.15);
+  color: var(--danger-color);
+}
 </style>

@@ -92,7 +92,53 @@
       </el-col>
     </el-row>
 
-    <!--
+    <!-- Daemon Status Overview -->
+    <el-row :gutter="20" style="margin-bottom:20px" v-if="daemonStats.total > 0">
+      <el-col :span="6">
+        <el-card shadow="hover" class="data-card">
+          <div style="display:flex;align-items:center;gap:16px">
+            <el-icon :size="28" color="#10b981"><VideoPlay /></el-icon>
+            <div>
+              <div style="font-size:12px;color:var(--text-secondary)">Daemon Running</div>
+              <div style="font-size:36px;font-weight:700;color:#10b981;font-family:var(--font-mono)">{{ daemonStats.running }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="data-card">
+          <div style="display:flex;align-items:center;gap:16px">
+            <el-icon :size="28" color="#64748b"><VideoPause /></el-icon>
+            <div>
+              <div style="font-size:12px;color:var(--text-secondary)">Daemon Stopped</div>
+              <div style="font-size:36px;font-weight:700;color:#64748b;font-family:var(--font-mono)">{{ daemonStats.stopped }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="data-card">
+          <div style="display:flex;align-items:center;gap:16px">
+            <el-icon :size="28" color="var(--warning-color)"><WarningFilled /></el-icon>
+            <div>
+              <div style="font-size:12px;color:var(--text-secondary)">Daemon Backoff</div>
+              <div style="font-size:36px;font-weight:700;color:var(--warning-color);font-family:var(--font-mono)">{{ daemonStats.backoff }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="data-card">
+          <div style="display:flex;align-items:center;gap:16px">
+            <el-icon :size="28" color="var(--danger-color)"><CircleCloseFilled /></el-icon>
+            <div>
+              <div style="font-size:12px;color:var(--text-secondary)">Daemon Fatal</div>
+              <div style="font-size:36px;font-weight:700;color:var(--danger-color);font-family:var(--font-mono)">{{ daemonStats.fatal }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
       第二行：左侧成功率进度环 + 右侧最近执行记录表格
     -->
     <el-row :gutter="20">
@@ -200,13 +246,6 @@
                   <code> 标签表示这是代码/程序输出，用等宽字体显示
                   substring(0, 100) 截取前 100 个字符，超出部分省略
                   如果没有输出内容，显示 '-' 占位符
-                -->
-                <code style="font-size:12px;color:var(--text-main);font-family:var(--font-mono)">{{ row.output?.substring(0, 100) || '-' }}</code>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-col>
     </el-row>
 
 	<!-- 第三行：性能指标图表 -->
@@ -245,11 +284,9 @@
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
-// 导入仪表盘和日志的 API 函数
-import { dashboardAPI, logAPI } from '../api/index'
+import { dashboardAPI, logAPI, daemonAPI } from '../api/index'
 
-// 导入仪表盘页面需要用到的 4 个图标组件
-import { Grid, CircleCheck, Timer, WarningFilled } from '@element-plus/icons-vue'
+import { Grid, CircleCheck, Timer, WarningFilled, VideoPlay, VideoPause, CircleCloseFilled } from '@element-plus/icons-vue'
 
 // 导入 ECharts
 import { use } from 'echarts/core'
@@ -287,6 +324,24 @@ const stats = ref<any>({})
  */
 const recentLogs = ref<any[]>([])
 
+const daemonStats = ref({ total: 0, running: 0, stopped: 0, backoff: 0, fatal: 0 })
+
+const fetchDaemonStats = async () => {
+  try {
+    const res: any = await daemonAPI.getAllStates()
+    const states = res?.data?.data || {}
+    const counts = { total: 0, running: 0, stopped: 0, backoff: 0, fatal: 0 }
+    for (const k of Object.keys(states)) {
+      const s = states[k]?.status || ''
+      counts.total++
+      if (s === 'RUNNING' || s === 'STARTING') counts.running++
+      else if (s === 'BACKOFF') counts.backoff++
+      else if (s === 'FATAL') counts.fatal++
+      else counts.stopped++
+    }
+    daemonStats.value = counts
+  } catch(e) {}
+}
 /**
  * successRate 是一个"计算属性"。
  * 它根据 stats 中的数据，自动算出成功率（百分比）。
@@ -335,30 +390,21 @@ const progressColor = computed(() => {
  *   1. 请求仪表盘统计数据
  *   2. 请求最近 8 条执行日志
  *
- * 这两个请求是串行的（先等第一个完成再发第二个），虽然没有并行快，
- * 但这里数据量小，影响不大。try/catch 包裹确保一个请求失败不影响另一个。
+ * 这两个请求是串行的（先等第一个完成再发第二个）
  */
 onMounted(async () => {
-  // 请求一：获取仪表盘统计数据
-  // try { ... } catch(e) {} 捕获可能的错误，错误静默忽略（页面保持显示 0）
   try { const s = await dashboardAPI.stats(); stats.value = s.data.data } catch(e) {}
-
-  /**
-   * 请求二：获取最近 8 条执行日志
-   * logAPI.list({ page: 1, page_size: 8 }) 请求第 1 页，每页 8 条
-   * 返回的数据结构：{ data: { data: { items: [...], total: 100 } } }
-   * 把 items 数组赋值给 recentLogs，如果没有返回空数组 []
-   */
   try { const l = await logAPI.list({ page: 1, page_size: 8 }); recentLogs.value = l.data.data.items || [] } catch(e) {}
-
   await refreshMetrics()
-  // 每隔15秒刷新一次指标
+  await fetchDaemonStats()
   metricsTimer = setInterval(refreshMetrics, 15000)
+  daemonTimer = setInterval(fetchDaemonStats, 5000)
 })
-
 let metricsTimer: any = null
+let daemonTimer: any = null
 onUnmounted(() => {
   if (metricsTimer) clearInterval(metricsTimer)
+  if (daemonTimer) clearInterval(daemonTimer)
 })
 
 const throughputOption = ref<any>({})
