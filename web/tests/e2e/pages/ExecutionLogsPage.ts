@@ -7,6 +7,6 @@ export class ExecutionLogsPage extends BasePage {
   async expectStatusFilterVisible() {
     await expect(this.page.locator('[data-testid="log-status-filter"]')).toBeVisible({ timeout: 10000 })
   }
-  async clickExportCSV() { await this.page.click('text=Export CSV') }
-  async clickExportJSON() { await this.page.click('text=Export JSON') }
+  async clickExportCSV() { await this.page.click('[data-testid="btn-export-csv"]') }
+  async clickExportJSON() { await this.page.click('[data-testid="btn-export-json"]') }
 }

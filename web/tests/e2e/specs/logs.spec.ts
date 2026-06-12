@@ -22,8 +22,8 @@ test.describe('Execution Logs', () => {
   test('export buttons exist', async ({ page }) => {
     const logsPage = new ExecutionLogsPage(page)
     await logsPage.goto()
-    await expect(page.locator('text=Export CSV')).toBeVisible()
-    await expect(page.locator('text=Export JSON')).toBeVisible()
+    await expect(page.locator('[data-testid="btn-export-csv"]')).toBeVisible()
+    await expect(page.locator('[data-testid="btn-export-json"]')).toBeVisible()
   })
 
   test('CSV export triggers download', async ({ page }) => {
