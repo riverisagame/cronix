@@ -33,6 +33,8 @@ type StatsCacheInvalidator interface {
 // 它从调度引擎接收触发信号，然后在线程池中执行
 type Executor struct {
 	db               *gorm.DB               // 数据库连接：查询任务、保存执行日志
+	logRepo          LogRepository          // 日志仓储接口：解耦底层存储实现 @Ref: 20260612_arch_hardening_plan.md
+	asyncWriter      *AsyncLogWriter        // 异步日志写入器：批量刷盘解放 I/O @Ref: 20260612_arch_hardening_plan.md
 	pool             *ants.Pool             // ants线程池：控制同时运行的任务数量，防止资源耗尽
 	cfg              *config.Config         // 系统配置：线程池大小、输出截断大小等
 	engine           *Engine                // 调度引擎：从这里接收"该执行任务了"的信号
@@ -56,7 +58,27 @@ func NewExecutor(db *gorm.DB, cfg *config.Config, engine *Engine) (*Executor, er
     if err != nil {
         return nil, fmt.Errorf("create ants pool: %w", err)    // %w 把原始错误包装起来，方便上层查看
     }
-    exec := &Executor{db: db, pool: pool, cfg: cfg, engine: engine}
+    // 初始化日志仓储接口和异步写入器 @Ref: 20260612_arch_hardening_plan.md | @Date: 2026-06-12
+    logRepo := NewGormLogRepository(db)
+    asyncWriter := NewAsyncLogWriter(logRepo, 200)
+    asyncWriter.Start()
+
+    exec := &Executor{db: db, logRepo: logRepo, asyncWriter: asyncWriter, pool: pool, cfg: cfg, engine: engine}
+
+    // 启动时清理孤儿日志：通过 logRepo 接口统一处理
+    now := time.Now()
+    if err := logRepo.CleanupOrphanedLogs(now); err != nil {
+        log.Error().Err(err).Msg("启动时清理孤儿执行日志失败")
+    }
+    // 组执行日志的孤儿清理仍使用 db 直接操作（LogRepository 接口暂不覆盖此内部操作）
+    db.Model(&model.GroupExecutionLog{}).
+        Where("status = ? AND end_time IS NULL", model.StateRunning).
+        Updates(map[string]interface{}{
+            "status":    model.StateFailed,
+            "error_msg": "System restarted or crashed",
+            "end_time":  now,
+        })
+
     // 注册组定时回调：cron到点后加载组成员并执行
     engine.SetGroupTrigger(func(groupID uint) {
         var g model.TaskGroup
@@ -225,42 +247,49 @@ func (e *Executor) buildDAG(tasks []model.Task) *DAG {
     return dag
 }
 
-// executeTask 执行单个任务（包含重试逻辑和结果通知）
-// 参数 taskID：要执行的任务ID
+// executeTask 执行单个任务（异步写入日志，用于独立 cron 触发）
+// @Ref: docs/sps/plans/20260612_arch_hardening_plan.md | @Date: 2026-06-12
 func (e *Executor) executeTask(taskID uint) {
+    e.executeTaskInternal(taskID, false)
+}
+
+// executeTaskSync 执行单个任务（同步写入日志，用于 RunGroup 内部调用，保证查询可见性）
+func (e *Executor) executeTaskSync(taskID uint) {
+    e.executeTaskInternal(taskID, true)
+}
+
+// executeTaskInternal 任务执行核心逻辑（含重试和通知）
+// syncSave=true 时同步写入日志，保证组内任务查询的实时可见性
+func (e *Executor) executeTaskInternal(taskID uint, syncSave bool) {
     // 第一步：从数据库查询任务详情
     var task model.Task
     if err := e.db.First(&task, taskID).Error; err != nil {
         log.Error().Err(err).Uint("task_id", taskID).Msg("fetch task failed")
         return
     }
-       // 防重：同一任务已有未完成执行记录时跳过，防止并发重复执行
-       var runningCount int64
-       e.db.Model(&model.ExecutionLog{}).
-               Where("task_id = ? AND status = ? AND end_time IS NULL", taskID, model.StateRunning).
-               Count(&runningCount)
-       if runningCount > 0 {
-               log.Warn().Uint("task_id", taskID).Str("task", task.Name).Msg("任务已有正在执行的记录，跳过本次触发")
-               return
-       }
-
-
-    // 第二步：创建一条执行日志记录
-    now := time.Now()
-    execLog := model.ExecutionLog{                               // 初始化日志结构体
-        TaskID:      &task.ID,                                   // 任务ID（指针类型，可以为空）
-        TaskName:    task.Name,                                  // 任务名
-        CronExpr:    task.CronExpr,                              // Cron表达式
-        Status:      model.StateRunning,                                  // 初始状态：运行中
-        TriggerType: "cron",                                     // 触发类型：定时触发
-        StartTime:   now,                                        // 开始时间
+    // 防重：通过 logRepo 接口查询是否有未完成的执行记录
+    runningCount, _ := e.logRepo.CountRunningLogs(taskID)
+    if runningCount > 0 {
+        log.Warn().Uint("task_id", taskID).Str("task", task.Name).Msg("任务已有正在执行的记录，跳过本次触发")
+        return
     }
-    e.db.Create(&execLog)                                        // 插入数据库
+
+    // 第二步：创建一条执行日志记录（同步写入，防重检查依赖实时可见性）
+    now := time.Now()
+    execLog := model.ExecutionLog{
+        TaskID:      &task.ID,
+        TaskName:    task.Name,
+        CronExpr:    task.CronExpr,
+        Status:      model.StateRunning,
+        TriggerType: "cron",
+        StartTime:   now,
+    }
+    e.logRepo.CreateExecutionLog(&execLog)
     log.Info().Str("task", task.Name).Uint("id", task.ID).Msg("executing task")
 
     // 第三步：执行任务，支持重试
-    maxRetries := task.RetryCount                                // 配置的重试次数
-    if maxRetries < 0 {                                          // 负数没有意义，视为0
+    maxRetries := task.RetryCount
+    if maxRetries < 0 {
         maxRetries = 0
     }
 
@@ -270,21 +299,47 @@ func (e *Executor) executeTask(taskID uint) {
         timeout = maxTO
         log.Warn().Str("task", task.Name).Int("requested", task.TimeoutSec).Int("capped", maxTO).Msg("任务超时超过全局上限，已限制")
     }
-    for attempt := 0; attempt <= maxRetries; attempt++ {         // 从第0次到第maxRetries次（最多maxRetries+1次尝试）
-        if attempt > 0 {                                         // 如果这不是第一次尝试
+    // 当任务级超时为 0 时，由全局上限兜底 @Ref: P0 全局超时阻断
+    if timeout <= 0 && e.cfg.Executor.MaxTimeoutSec > 0 {
+        timeout = e.cfg.Executor.MaxTimeoutSec
+    }
+    for attempt := 0; attempt <= maxRetries; attempt++ {
+        if attempt > 0 {
             log.Info().Str("task", task.Name).Int("attempt", attempt).Int("max", maxRetries).Msg("retrying")
-            execLog.RetryAttempt = attempt                        // 记录重试次数
-            time.Sleep(time.Duration(task.RetryIntervalSec) * time.Second) // 等待重试间隔
+            execLog.RetryAttempt = attempt
+            time.Sleep(time.Duration(task.RetryIntervalSec) * time.Second)
         }
-        execLog.Status = model.StateRunning                                // 重置状态
-        execLog.ErrorMsg = ""                                     // 清空错误信息
-        e.runTaskByType(&task, &execLog, timeout)                     // 根据任务类型执行
-        if execLog.Status == model.StateSuccess {                          // 执行成功，不再重试
+        execLog.Status = model.StateRunning
+        execLog.ErrorMsg = ""
+        e.runTaskByType(&task, &execLog, timeout)
+        if execLog.Status == model.StateSuccess {
             break
         }
     }
 
-    // 第四步：发送通知（如果需要的话）
+    // 第四步：写入执行结果 @Ref: P1 异步刷盘
+    if syncSave {
+        // 同步写入：用于 RunGroup，保证查询可见性
+        e.logRepo.SaveExecutionLog(&execLog)
+    } else {
+        // 异步写入：用于独立 cron 任务，解放 I/O
+        e.asyncWriter.Enqueue(&execLog)
+    }
+    if execLog.TaskID != nil && e.cfg.Log.MaxLogsPerTask > 0 {
+        taskIDToClean := *execLog.TaskID
+        maxLogs := e.cfg.Log.MaxLogsPerTask
+        go func() {
+            if err := e.logRepo.DeleteExcessTaskLogs(taskIDToClean, maxLogs); err != nil {
+                log.Warn().Err(err).Uint("task_id", taskIDToClean).Msg("limitTaskLogs failed")
+            }
+        }()
+    }
+    atomic.AddUint64(&e.logWriteCounter, 1)
+    if atomic.LoadUint64(&e.logWriteCounter)%500 == 0 {
+        go e.cleanupOldLogs()
+    }
+
+    // 第五步：发送通知（如果需要的话）
     e.notifyTaskResult(&task, &execLog)
 }
 
@@ -298,16 +353,12 @@ func (e *Executor) ExecuteTaskWithContext(ctx context.Context, taskID uint) {
         log.Error().Err(err).Uint("task_id", taskID).Msg("fetch task failed")
         return
     }
-       // 防重：同一任务已有未完成执行记录时跳过，防止并发重复执行
-       var runningCount int64
-       e.db.Model(&model.ExecutionLog{}).
-               Where("task_id = ? AND status = ? AND end_time IS NULL", taskID, model.StateRunning).
-               Count(&runningCount)
-       if runningCount > 0 {
-               log.Warn().Uint("task_id", taskID).Str("task", task.Name).Msg("任务已有正在执行的记录，跳过本次触发")
-               return
-       }
-
+    // 防重：通过 logRepo 接口统一查询
+    runningCount, _ := e.logRepo.CountRunningLogs(taskID)
+    if runningCount > 0 {
+        log.Warn().Uint("task_id", taskID).Str("task", task.Name).Msg("任务已有正在执行的记录，跳过本次触发")
+        return
+    }
 
     // 第二步：创建一条执行日志记录
     now := time.Now()
@@ -319,7 +370,7 @@ func (e *Executor) ExecuteTaskWithContext(ctx context.Context, taskID uint) {
         TriggerType: "daemon",
         StartTime:   now,
     }
-    e.db.Create(&execLog)
+    e.logRepo.CreateExecutionLog(&execLog)
     log.Info().Str("task", task.Name).Uint("id", task.ID).Msg("daemon executing task")
 
     // 第三步：执行任务（常驻任务不重试，由 DaemonMonitor 统一管理重启策略）
@@ -327,6 +378,8 @@ func (e *Executor) ExecuteTaskWithContext(ctx context.Context, taskID uint) {
     // 否则 DB 默认值 300s 会导致 daemon 每 5 分钟被超时强杀
     e.runTaskByTypeCtx(ctx, &task, &execLog, 0)
 
+    // Daemon 任务同步写入，保证 DaemonMonitor 查询的实时可见性
+    e.logRepo.SaveExecutionLog(&execLog)
 
     // 第四步：发送通知
     e.notifyTaskResult(&task, &execLog)
@@ -415,20 +468,10 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
 	duration := now.Sub(execLog.StartTime).Milliseconds()
 	GlobalMetricsRegistry.RecordExecution(duration, execLog.Status == model.StateSuccess)
 
-	e.db.Save(execLog)                                           // 把执行结果保存到数据库
-    
-    // 异步执行单任务数据库日志限额清理，绝不阻塞当前 Worker 归还给线程池
-    if execLog.TaskID != nil && e.cfg.Log.MaxLogsPerTask > 0 {
-        taskIDToClean := *execLog.TaskID
-        maxLogs := e.cfg.Log.MaxLogsPerTask
-        go e.limitTaskLogs(taskIDToClean, maxLogs)
-    }
-
-    // 原子计数器递增，每 500 次写入异步触发一次全局日志清理
-    atomic.AddUint64(&e.logWriteCounter, 1)
-    if atomic.LoadUint64(&e.logWriteCounter)%500 == 0 {
-        go e.cleanupOldLogs()
-    }
+	// 注意：Save 操作由调用者决定同步/异步方式。
+	// executeTask → asyncWriter.Enqueue（独立 cron 任务，异步写入）
+	// ExecuteTaskWithContext → logRepo.SaveExecutionLog（daemon 任务，同步写入）
+	// RunGroup → logRepo.SaveExecutionLog（组内任务，同步写入，保证查询可见性）
 
     if e.CacheInvalidator != nil {
         e.CacheInvalidator.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
@@ -479,9 +522,13 @@ func (e *Executor) notifyTaskResult(task *model.Task, execLog *model.ExecutionLo
     }
 }
 
-// Shutdown 关闭执行器，释放线程池资源
+// Shutdown 关闭执行器，先排空异步日志再释放线程池资源
+// @Ref: docs/sps/plans/20260612_arch_hardening_plan.md | @Date: 2026-06-12
 func (e *Executor) Shutdown() {
-    e.pool.Release()                                             // 释放线程池
+    if e.asyncWriter != nil {
+        e.asyncWriter.Stop()                                     // 先排空异步日志
+    }
+    e.pool.Release()                                             // 再释放线程池
 }
 
 // RunGroup executes all tasks in a group according to the group's mode.
@@ -496,7 +543,7 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
         Status:      model.StateRunning,
         StartTime:   now,
     }
-    e.db.Create(&glog)
+    e.logRepo.CreateGroupLog(&glog)
     log.Info().Str("group", g.Name).Str("mode", g.Mode).Int("members", len(members)).Msg("running group")
 
     var success, failed int
@@ -521,11 +568,10 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
                         log.Error().Interface("panic", r).Str("task", task.Name).Msg("group task panic")
                     }
                 }()
-                e.executeTask(task.ID)
-                var lastLog model.ExecutionLog
-                e.db.Where("task_id = ?", task.ID).Order("id DESC").First(&lastLog)
+                e.executeTaskSync(task.ID)
+                lastLog, err := e.logRepo.GetLatestTaskLog(task.ID)
                 mu.Lock()
-                if lastLog.Status == model.StateSuccess { success++ } else { failed++ }
+                if err == nil && lastLog != nil && lastLog.Status == model.StateSuccess { success++ } else { failed++ }
                 mu.Unlock()
             })
         }
@@ -538,11 +584,10 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
                        log.Info().Str("task", t.Name).Msg("group (sequential): 跳过 daemon 任务")
                        continue  // daemon 任务由 DaemonMonitor 独立管理，不参与组执行
                }
-            e.executeTask(t.ID)
-            var lastLog model.ExecutionLog
-            e.db.Where("task_id = ?", t.ID).Order("id DESC").First(&lastLog)
-            if lastLog.Status == model.StateSuccess { success++ } else { failed++; errMsg = lastLog.ErrorMsg }
-            if lastLog.Status == model.StateFailed {
+            e.executeTaskSync(t.ID)
+            lastLog, err := e.logRepo.GetLatestTaskLog(t.ID)
+            if err == nil && lastLog != nil && lastLog.Status == model.StateSuccess { success++ } else { failed++; if lastLog != nil { errMsg = lastLog.ErrorMsg } }
+            if lastLog != nil && lastLog.Status == model.StateFailed {
                 log.Warn().Str("group", g.Name).Str("task", t.Name).Msg("group (sequential) stopped due to failure")
                 break
             }
@@ -584,16 +629,17 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
 						}
 					}()
 					
-					e.executeTask(tid)
-					var lastLog model.ExecutionLog
-					e.db.Where("task_id = ?", tid).Order("id DESC").First(&lastLog)
+					e.executeTaskSync(tid)
+					lastLog, logErr := e.logRepo.GetLatestTaskLog(tid)
 					
 					mu.Lock()
-					if lastLog.Status == model.StateSuccess {
+					if logErr == nil && lastLog != nil && lastLog.Status == model.StateSuccess {
 						success++
 					} else {
 						failed++
-						errMsg = lastLog.ErrorMsg
+						if lastLog != nil {
+							errMsg = lastLog.ErrorMsg
+						}
 						layerFailed = true
 					}
 					mu.Unlock()
@@ -617,41 +663,8 @@ func (e *Executor) RunGroup(g *model.TaskGroup, members []model.Task, triggerTyp
 	} else {
 		glog.Status = "success"
 	}
-	e.db.Save(&glog)
+	e.logRepo.SaveGroupLog(&glog)
 	if e.CacheInvalidator != nil {
 		e.CacheInvalidator.InvalidateStatsCache() // @Ref: docs/sps/plans/20260527_performance_stability_plan.md | @Date: 2026-05-27
-	}
-}
-
-// limitTaskLogs 清理单个任务的超额日志记录，防止数据库爆满和“劣币驱逐良币”
-func (e *Executor) limitTaskLogs(taskID uint, maxLogs int) {
-	var count int64
-	e.db.Model(&model.ExecutionLog{}).Where("task_id = ?", taskID).Count(&count)
-	if count <= int64(maxLogs) {
-		return
-	}
-	excess := count - int64(maxLogs)
-
-	// 为了兼容 SQLite / MySQL 等不同数据库，不能直接在 DELETE 中使用 LIMIT。
-	// 我们先查询出最旧的 excess 个 id，然后再批量删除它们。
-	var ids []uint
-	err := e.db.Model(&model.ExecutionLog{}).
-		Select("id").
-		Where("task_id = ?", taskID).
-		Order("id ASC").
-		Limit(int(excess)).
-		Pluck("id", &ids).Error
-	if err != nil {
-		log.Warn().Err(err).Uint("task_id", taskID).Msg("failed to query oldest log ids for limitTaskLogs")
-		return
-	}
-
-	if len(ids) > 0 {
-		result := e.db.Where("id IN (?)", ids).Delete(&model.ExecutionLog{})
-		if result.Error != nil {
-			log.Warn().Err(result.Error).Uint("task_id", taskID).Msg("failed to prune oldest log ids in limitTaskLogs")
-		} else {
-			log.Debug().Int64("deleted", result.RowsAffected).Uint("task_id", taskID).Msg("limitTaskLogs pruned excess logs")
-		}
 	}
 }
