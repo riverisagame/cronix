@@ -13,19 +13,9 @@ import (
     "os"
     "os/exec"     // 执行外部命令：调用系统的命令行
     "path/filepath"
-    "sync"
     "time"        // 时间：用于超时计算
 )
 
-var RunningTaskCancels sync.Map
-
-// ShellResult 存放Shell命令执行后的结果
-// 这个结构体在shell_windows.go和shell_unix.go中都定义了（条件编译）
-type ShellResult struct {
-    Output   string // 命令的输出内容（标准输出+标准错误合并）
-    ExitCode int    // 命令的退出码：0=成功，非0=失败，-1=异常
-    Error    error  // 执行过程中的错误（nil表示没有错误）
-}
 
 // ExecuteShell 在Windows系统上执行Shell命令（带超时保护）
 // 参数 ctx：上下文（备用，实际用独立的超时上下文）
@@ -108,13 +98,4 @@ func ExecuteShell(ctx context.Context, command string, workDir string, timeoutSe
     // 第七步：命令执行成功
     result.ExitCode = 0                                         // 退出码为0表示一切正常
     return result
-}
-
-// CancelExecution 尝试手动强杀指定的正在运行的执行进程
-func CancelExecution(taskID uint) bool {
-    if cancel, ok := RunningTaskCancels.Load(taskID); ok {
-        cancel.(context.CancelFunc)()
-        return true
-    }
-    return false
 }

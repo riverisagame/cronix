@@ -34,14 +34,6 @@ import (
 	"cronix/internal/config"
 )
 
-var RunningTaskCancels sync.Map
-
-// ShellResult 存放Shell命令执行结果
-type ShellResult struct {
-	Output   string // 内存中保存的截断后输出内容
-	ExitCode int    // 退出码：0=成功，-1=被强制终止
-	Error    error  // 错误信息
-}
 
 // ============================================================
 // 1. SafeBuffer: 带大小上限与互斥锁的并发安全内存缓冲区
