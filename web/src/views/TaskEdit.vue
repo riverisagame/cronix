@@ -329,7 +329,7 @@ const form = ref<any>({ name:'', run_mode:'cron', restart_policy:'always', max_r
  *   enabled: 是否启用，默认 true（启用）
  *   description: 任务描述（空）
  */
-const form = ref<any>({ name:'', run_mode:'cron', restart_policy:'always', max_restart_attempts:10, cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'root', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
+const form = ref<any>({ name:'', run_mode:'cron', restart_policy:'always', max_restart_attempts:10, restart_delay_sec:0, scheduled_restart_sec:0, cron_expr:'', task_type:'shell', command:'', http_method:'GET', http_url:'', http_auth_type:'none', work_dir:'', run_as:'root', group_id: null, dep_ids: [], timeout_sec:300, retry_count:0, retry_interval_sec:10, max_concurrent:1, enabled:true, description:'' })
 const notifyForm = ref<any>({ webhook_url: '', on_failure: true, on_success: false })
 const groupList = ref<any[]>([])
 const availableDepTasks = ref<any[]>([])

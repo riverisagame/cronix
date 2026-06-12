@@ -81,7 +81,8 @@
           :status="detail.status"
           :logs="(liveOutput || detail.output || '') + (detail.error_msg ? '\n' + detail.error_msg : '')"
           :duration="detail.end_time ? duration(detail.start_time, detail.end_time) : ''"
-          :taskId="detail.task_id"
+          @download="(format: string) => downloadSingleLog(detail, format)"
+          @kill="() => killRunningTask(detail)"
         />
       </template>
     </el-drawer>
@@ -219,7 +220,16 @@ async function showDetail(rowData: any) {
     }
   } finally { detailLoading.value = false }
 }
-
+async function killRunningTask(detail: any) {
+  if (!detail?.task_id) return
+  try {
+    await taskAPI.kill(detail.task_id)
+    ElMessage.success('Task killed')
+    showDetail(detail)  // 刷新详情
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.message || 'Failed to kill task')
+  }
+}
 async function exportLogs(format: string) {
   exporting.value = true
   try {

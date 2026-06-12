@@ -675,12 +675,3 @@ exit $?
 	result.ExitCode = 0
 	return result
 }
-
-// CancelExecution 尝试手动强杀指定的正在运行的执行进程
-func CancelExecution(taskID uint) bool {
-	if cancel, ok := RunningTaskCancels.Load(taskID); ok {
-		cancel.(context.CancelFunc)()
-		return true
-	}
-	return false
-}

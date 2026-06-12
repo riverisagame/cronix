@@ -209,8 +209,8 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			})
 			m.executor.ExecuteTaskWithContext(execCtx, taskID)
 			timer.Stop()
-			// 子 ctx 被取消但父 ctx 没被取消 = 定时重启触发
 			wasScheduled = execCtx.Err() != nil && ctx.Err() == nil
+			execCancel() // 始终释放子 context，避免 goroutine 泄漏（idempotent）
 		} else {
 			m.executor.ExecuteTaskWithContext(ctx, taskID)
 		}
@@ -230,14 +230,15 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 		exitSuccess := (err == nil && latestLog.Status == "success") || wasScheduled
 
 		// 根据重启策略判定是否需要重启
-		shouldRestart := false
-		switch restartPolicy {
-		case "always":
-			shouldRestart = true
-		case "on-failure":
-			shouldRestart = !exitSuccess
-		case "never":
-			shouldRestart = false
+		// 根据重启策略判定是否需要重启（定时重启强制重启）
+		shouldRestart := wasScheduled
+		if !shouldRestart {
+			switch restartPolicy {
+			case "always":
+				shouldRestart = true
+			case "on-failure":
+				shouldRestart = !exitSuccess
+			}
 		}
 
 		if !shouldRestart {

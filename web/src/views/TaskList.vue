@@ -726,6 +726,7 @@ const clearLiveStream = () => {
 // 抽屉关闭时的清理逻辑
 const onDrawerClose = () => {
   clearLiveStream()
+  activeTab.value = 'history'  // 重置确保下次打开时 watch 能触发
 }
 
 // 获取日志流（daemon 感知 + offset 增量）
@@ -1205,14 +1206,15 @@ onUnmounted(() => {
   border-radius: 2px;
 }
 
-/* Daemon RUNNING status pulse */
-@keyframes daemon-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-  50% { opacity: 0.85; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
-}
-
-.daemon-running-tag {
-  animation: daemon-pulse 2s ease-in-out infinite;
+/* Daemon RUNNING status pulse (reduced-motion safe) */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes daemon-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    50% { opacity: 0.85; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
+  }
+  .daemon-running-tag {
+    animation: daemon-pulse 2s ease-in-out infinite;
+  }
 }
 
 /* 表格行 hover 增强 */
