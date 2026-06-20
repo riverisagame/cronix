@@ -174,9 +174,21 @@ func (m *DaemonMonitor) startDaemonInternal(parentCtx context.Context, taskID ui
 	}
 	task := *taskPtr // 星号(*) 意思是把指针指向的内容“解引用”抠出来。
 
-	// 【大厂面试考点：Context 取消树】
-	// 基于父 Context，生出一个子 Context（ctx）和一把刀（cancel）。
-	// 只要动了这把刀（调 cancel() 函数），所有关联着这个 ctx 的动作都会被立即打断。
+	// 💡 【大厂面试·底层原理扩展：Context 取消树与 Goroutine 泄露】
+	// 
+	// 场景重现：
+	// 如果你起了一个协程去爬取网页，但这个网页卡死了，而且你没设置超时。随着时间推移，后台会堆积几万个永远也退不出的僵尸协程，
+	// 这就是臭名昭著的“Goroutine 泄露”。最终系统会因为内存耗尽（OOM）而崩溃。
+	//
+	// 底层剖析与大厂对冲方案：
+	// 1. 取消树（Cancellation Tree）：`context` 在 Go 源码中是通过类似多叉树的结构组织的。
+	//    `context.WithCancel(parentCtx)` 相当于在父节点下挂了一个子节点，并返回了一把专门切断这个子节点连线的“刀”（cancel 函数）。
+	// 2. 级联收割：大厂面试题常问：“子 Context 被 cancel 时，父 Context 会怎样？”
+	//    答：父节点毫无影响。但反过来，“如果父节点被 cancel，子节点会怎样？”
+	//    答：父节点会顺着底层的 `children map` 遍历，把底下挂着的所有子子孙孙 Context 全部 cancel 掉（级联销毁）。
+	// 3. Cronix 的落地：这里我们拿到了这把刀（cancel），把它存进花名册 `m.states` 里。
+	//    当用户在网页上点击“停止任务”时，我们只要从花名册抽出这把刀调一下 `cancel()`。
+	//    底下正在 `select <-ctx.Done()` 阻塞监听的恶龙协程，瞬间就会收到信号并 return，完美杜绝了 Goroutine 泄露！
 	ctx, cancel := context.WithCancel(parentCtx)
 
        now := time.Now() // 获取系统当前时间
