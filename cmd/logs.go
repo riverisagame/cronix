@@ -25,9 +25,9 @@ import (
     "time"
 
     // 以下是我们项目自己的模块
-    "cronix/internal/config"   // 读取配置文件，获取数据库路径
-    "cronix/internal/database" // 打开数据库
-    "cronix/internal/model"    // 日志数据模型（ExecutionLog 结构体）
+    "cronix/internal/infrastructure/config"   // 读取配置文件，获取数据库路径
+    "cronix/internal/infrastructure/database" // 打开数据库
+    "cronix/internal/domain/model"    // 日志数据模型（ExecutionLog 结构体）
 
     // cobra 命令行框架
     "github.com/spf13/cobra"

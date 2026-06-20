@@ -44,13 +44,13 @@ import (
 
     // 以下是我们自己写的项目内部模块
     // 每个模块负责一块独立的功能，就像汽车的不同零件
-    "cronix/internal/config"   // 配置管理：读写 config.yaml 配置文件
-    "cronix/internal/database" // 数据库管理：打开/关闭数据库，建表
-    "cronix/internal/handler"  // HTTP 请求处理器：接收网页请求并返回数据
-    "cronix/internal/notify"   // 通知发送器：Webhook/Email 通知
-    "cronix/internal/router"   // 路由设置：定义"哪个 URL 地址访问哪个页面"
-    "cronix/internal/scheduler" // 调度引擎：管理所有任务什么时候该跑
-    "cronix/internal/service"  // 业务逻辑层：处理任务和日志的实际操作
+    "cronix/internal/infrastructure/config"   // 配置管理：读写 config.yaml 配置文件
+    "cronix/internal/infrastructure/database" // 数据库管理：打开/关闭数据库，建表
+    "cronix/internal/interfaces/handler"  // HTTP 请求处理器：接收网页请求并返回数据
+    "cronix/internal/infrastructure/notify"   // 通知发送器：Webhook/Email 通知
+    "cronix/internal/interfaces/router"   // 路由设置：定义"哪个 URL 地址访问哪个页面"
+    "cronix/internal/application/scheduler" // 调度引擎：管理所有任务什么时候该跑
+    "cronix/internal/application/service"  // 业务逻辑层：处理任务和日志的实际操作
 
     // 以下是第三方开源库
     // zerolog 是一个高性能的日志输出库
