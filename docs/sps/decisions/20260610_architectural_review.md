@@ -1,4 +1,4 @@
-# Architectural Review of Cronix System (2026-06-10)
+﻿# Architectural Review of Cronix System (2026-06-10)
 
 ## 1. 架构现状分析 (Context & Current State)
 Cronix 目前是一个基于 `robfig/cron/v3` 和 `ants` 线程池构建的单节点分布式定时任务系统，结合了 GORM 进行 SQLite/MySQL 的存储。其核心分为 `Engine` (触发器) 和 `Executor` (执行器)。

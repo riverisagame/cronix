@@ -1,4 +1,4 @@
-# 可观测性仪表盘 (Metrics & Observability) 实施计划
+﻿# 可观测性仪表盘 (Metrics & Observability) 实施计划
 
 本计划旨在为 Cronix 引入内置的内存时序滑窗（Ring Buffer），提供任务执行吞吐量与耗时分布（P95/P99）的实时监控能力，并在前端 Dashboard 渲染折线图。
 

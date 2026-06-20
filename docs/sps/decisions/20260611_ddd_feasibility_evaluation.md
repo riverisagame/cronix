@@ -1,4 +1,4 @@
-# Architecture Decision Record: DDD Feasibility Evaluation
+﻿# Architecture Decision Record: DDD Feasibility Evaluation
 
 ## Context
 用户提出评估当前系统（Cronix）是否适合引入领域驱动设计 (DDD)。当前系统采用典型的三层架构（Model, Service, Handler）配合独立的后台调度引擎（Scheduler, Executor）。

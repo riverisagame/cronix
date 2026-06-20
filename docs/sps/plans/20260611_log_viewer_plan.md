@@ -1,4 +1,4 @@
-# Log Viewer Unification & E2E Test Fix
+﻿# Log Viewer Unification & E2E Test Fix
 
 This plan addresses the E2E test failures and unifies the log viewing experience across the application. 
 

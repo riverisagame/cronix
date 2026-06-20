@@ -1,4 +1,4 @@
-# 架构深度评审与对冲报告 (ADR: Cronix Scheduler Engine)
+﻿# 架构深度评审与对冲报告 (ADR: Cronix Scheduler Engine)
 
 ## 1. 评审背景与攻击面设定
 在修复了因进程强杀导致的常驻任务死锁问题后，作为主控架构师，我受命对 `cronix` 的调度核心（`Engine`、`Executor`、`Daemon Monitor`、`Database`）进行深度架构扫描。

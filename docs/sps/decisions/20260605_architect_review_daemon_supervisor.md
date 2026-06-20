@@ -1,4 +1,4 @@
-# Architectural Review: Daemon & Supervisor Implementation
+﻿# Architectural Review: Daemon & Supervisor Implementation
 **Date**: 2026-06-05
 **Reviewer**: Architect Agent (Active Skill: architect-review)
 **Target**: Task-05 常驻守护进程功能 (DaemonMonitor)

@@ -1,4 +1,4 @@
-# [ADR] 20260605: 可观测性面板与性能指标采集 (Metrics Architecture)
+﻿# [ADR] 20260605: 可观测性面板与性能指标采集 (Metrics Architecture)
 
 ## 1. 背景与目标 (Background & Goals)
 用户选择了“路线 B：可观测性仪表盘”。

@@ -1,4 +1,4 @@
-# [Task-18] 流式日志与进程手动干预 (Log Streaming & Kill Switch)
+﻿# [Task-18] 流式日志与进程手动干预 (Log Streaming & Kill Switch)
 
 ## 风险评估与对体现有功能的“零侵入”设计
 针对您提出的“风险大不大”以及“绝对无损”要求：

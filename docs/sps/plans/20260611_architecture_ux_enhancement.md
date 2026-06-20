@@ -1,4 +1,4 @@
-# 纳米级执行计划 (Nano-level Execution Plan)
+﻿# 纳米级执行计划 (Nano-level Execution Plan)
 Date: 2026-06-11
 Task ID: Task-15
 Module: Backend (Model), Frontend (UI/UX)

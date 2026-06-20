@@ -1,4 +1,4 @@
-# Log Storage & Viewing Optimization - Design Spec
+﻿# Log Storage & Viewing Optimization - Design Spec
 
 > **Version:** 1.0 | **Date:** 2026-05-26 | **Status:** Confirmed
 

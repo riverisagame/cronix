@@ -1,4 +1,4 @@
-# 验收报告: 接口隔离与依赖倒置 (Task-06)
+﻿# 验收报告: 接口隔离与依赖倒置 (Task-06)
 
 ## 1. 验证目标
 - 打破 `internal/service` 对 `internal/scheduler` 的具体实现（指针）的强依赖。

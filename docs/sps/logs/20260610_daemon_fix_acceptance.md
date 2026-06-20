@@ -1,4 +1,4 @@
-# 验收报告：Daemon 任务 fork/exec 报错就退出问题修复
+﻿# 验收报告：Daemon 任务 fork/exec 报错就退出问题修复
 
 ## 1. 验证目标
 验证当系统中执行命令（特别是 Daemon 类型的任务）遇到环境限制、依赖缺失（如 `systemd-run` 或 `sudo` 不存在）等原因导致的 `fork/exec` 报错时，守护监控器（Daemon Monitor）能否正确实现无限次退避重试（对于 `always` 策略），以及内部管道（Pipe）降级过程是否存在由于错误忽略导致的 `panic` 及描述符泄漏问题。

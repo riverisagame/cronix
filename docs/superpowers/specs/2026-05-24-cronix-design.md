@@ -1,4 +1,4 @@
-# Cronix - High Performance Task Scheduler - Design Spec
+﻿# Cronix - High Performance Task Scheduler - Design Spec
 
 > **Version:** 1.0 | **Date:** 2026-05-24 | **Status:** Confirmed
 

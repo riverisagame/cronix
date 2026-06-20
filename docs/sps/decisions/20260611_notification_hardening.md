@@ -1,4 +1,4 @@
-# Notification System Hardening ADR
+﻿# Notification System Hardening ADR
 
 ## 1. 现状痛点 (The Problem)
 当前系统中，任务执行完毕后的通知投递机制存在严重瓶颈，具体表现为：

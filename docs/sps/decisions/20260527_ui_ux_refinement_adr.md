@@ -1,4 +1,4 @@
-# ADR: 前端视觉重构与“极简工业控制台 (Industrial Cyberpunk Console)”美学优化
+﻿# ADR: 前端视觉重构与“极简工业控制台 (Industrial Cyberpunk Console)”美学优化
 
 ## 1. 背景与上下文
 当前 Cronix 的前端 UI 采用 Element Plus 默认的扁平暗黑配置，显得普通且缺乏专业控制台的科技感，缺乏用户的视觉 wow 效应。

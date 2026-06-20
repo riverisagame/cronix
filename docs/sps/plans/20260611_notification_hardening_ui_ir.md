@@ -1,4 +1,4 @@
-# Notification System Hardening & UI Integration
+﻿# Notification System Hardening & UI Integration
 
 解决“通知队列堵塞引发雪崩丢包”问题，并补齐缺失的前端 Webhook 配置界面。采用绝对的 TDD（红绿重构）方法，确保现有调度与执行功能**0影响**。
 

@@ -1,4 +1,4 @@
-# 架构决策记录 (ADR) - 类 Supervisor 常驻进程守护功能设计
+﻿# 架构决策记录 (ADR) - 类 Supervisor 常驻进程守护功能设计
 
 - **设计日期**：2026-06-05
 - **评估模块**：`internal/scheduler`, `internal/model`, `web/`

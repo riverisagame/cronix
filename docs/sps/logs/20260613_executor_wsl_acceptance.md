@@ -1,4 +1,4 @@
-# 自动化验收报告：Executor SQLite 并发与可靠性加固
+﻿# 自动化验收报告：Executor SQLite 并发与可靠性加固
 
 - **Date**: 2026-06-13
 - **Task ID**: ARCH-HARDEN

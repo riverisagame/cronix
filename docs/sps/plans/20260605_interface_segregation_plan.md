@@ -1,4 +1,4 @@
-# [SCAN] 接口隔离与依赖倒置重构计划 (Nano-scale TDD)
+﻿# [SCAN] 接口隔离与依赖倒置重构计划 (Nano-scale TDD)
 
 ## 1. 背景与目标 (Background & Goals)
 当前系统存在物理包级别的强引用：`internal/service` 层内的业务结构体强耦合了 `internal/scheduler` 的具体执行引擎指针 (`*scheduler.Engine`, `*scheduler.DaemonMonitor`)。这不仅导致测试困难（必须启动真实引擎），还埋下了循环依赖的隐患。

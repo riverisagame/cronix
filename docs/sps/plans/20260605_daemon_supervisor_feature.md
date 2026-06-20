@@ -1,4 +1,4 @@
-# 类 Supervisor 常驻进程守护功能纳米级执行计划
+﻿# 类 Supervisor 常驻进程守护功能纳米级执行计划
 
 本计划旨在实现 Cronix 的常驻守护进程管理功能（Task-05），包括 Task 模型字段扩展、守护引擎 DaemonMonitor 实现、`shell_unix.go` 的 `ExecuteShell` 的 context 传入 Bug 修复、手动启停 API 路由对接，以及 TDD 绝对测试驱动的单元测试编写。
 

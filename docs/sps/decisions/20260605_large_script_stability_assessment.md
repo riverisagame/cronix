@@ -1,4 +1,4 @@
-# 架构评估记录 (ADR) - Linux 环境下大脚本执行稳定性与资源硬隔离方案
+﻿# 架构评估记录 (ADR) - Linux 环境下大脚本执行稳定性与资源硬隔离方案
 
 - **评估日期**：2026-06-05
 - **评估模块**：`internal/executor`, `internal/scheduler`

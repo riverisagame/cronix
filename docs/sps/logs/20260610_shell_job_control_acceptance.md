@@ -1,4 +1,4 @@
-# 验收报告：Shell Job Control 隔离重构
+﻿# 验收报告：Shell Job Control 隔离重构
 
 - **日期**：2026-06-10
 - **任务**：修正 executor 的 setpgid EPERM 权限错误及孙子进程逃逸问题
