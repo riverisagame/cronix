@@ -80,12 +80,10 @@ describe('Login.vue', () => {
     expect(wrapper.find('[data-testid="login-submit"]').exists()).toBe(true)
   })
 
-  it('renders CEX landing page marketing elements', () => {
+  it('renders simple centered login box', () => {
     const wrapper = mountLogin()
-    expect(wrapper.text()).toContain('Trade the Future, Task the Present')
-    expect(wrapper.text()).toContain('BTC/USDT')
-    expect(wrapper.text()).toContain('ETH/USDT')
-    expect(wrapper.text()).toContain('Bank-Grade Security')
+    expect(wrapper.text()).toContain('Welcome Back')
+    expect(wrapper.text()).toContain('CRONIX')
   })
 
   it('binds username and password via v-model', async () => {
