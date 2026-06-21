@@ -2,6 +2,20 @@
 // internal/handler/task.go - 任务增删改查（CRUD）处理器
 // 包含手动触发任务和依赖管理功能
 // ============================================================
+// 🏗️ 【架构设计·模式对比】
+// RESTful API 设计规范 (Richardson 成熟度模型)：
+// 本文件遵循 Level 2 成熟度（使用 HTTP 动词和资源 URI）：
+// - Level 0: 只有单一端点和 POST 方法（如 SOAP/RPC）
+// - Level 1: 引入资源 URI（如 /api/tasks/1），但仍滥用 POST
+// - Level 2: 引入 HTTP 动词（GET/POST/PUT/DELETE 分别代表查/增/改/删）
+// - Level 3 (最高级 HATEOAS): 响应中包含相关操作的超链接（本项目未采用，因会增加前端解析复杂度）。
+//
+// 📌 【大厂面试·核心考点】
+// 面试官：RESTful 规范中 PUT 和 PATCH 的区别是什么？
+// 标准答案：PUT 要求发送整个资源的完整数据（全量更新），如果字段没传，理论上应该被置空。
+// 而 PATCH 是局部更新，只修改传过去的字段。本文件中的 UpdateTask 虽路由用 PUT，
+// 但实际逻辑支持局部修改（只从 JSON 取有的字段），严格意义上它应该被定义为 PATCH 接口。
+// ============================================================
 package handler
 
 import (
@@ -32,6 +46,15 @@ import (
 // 3. 把菜单递给后厨大厨（调用 Service 层的函数）。
 // 4. 把做好的菜端给客人（返回 JSON 格式的 HTTP 响应，比如 200 OK）。
 //
+// 🔬 【底层原理·深度剖析】
+// Gin 框架的中间件链与 Context 传播机制：
+// c *gin.Context 是贯穿整个 HTTP 请求生命周期的核心。
+// 1. Context 内部包含 Request 和 Writer，同时维护了一个 handlers 数组（即中间件+当前处理器）。
+// 2. 通过 c.Next() 可以执行下一个中间件，c.Abort() 会阻止后续中间件执行。
+// 3. 💀 踩坑血泪：如果在 Handler 中开启 Goroutine，绝对不能直接传递 c！
+//    因为当 HTTP 响应返回后，c 会被回收到 sync.Pool 中重用，Goroutine 继续读写 c 会导致数据错乱或 Panic。
+//    正确做法是传入 c.Copy() 的副本。
+//
 // 它持有三个依赖对象，用来完成各种操作
 type TaskHandler struct {
     TaskSvc   *service.TaskService     // 任务服务：处理任务的增删改查业务逻辑
@@ -52,6 +75,12 @@ func validateTask(t *model.Task) string {
 
     t.CronExpr = strings.TrimSpace(t.CronExpr)
     if t.CronExpr != "" {
+        // 🛡️ 【安全攻防·漏洞防线】
+        // 输入校验策略对比：
+        // 1. 【正则表达式】（如本处的 cron 校验）：适合固定格式的文本。
+        //    缺点是容易引发 ReDoS（正则表达式拒绝服务攻击）。防线建议：限制正则执行时间，或者避免复杂嵌套 `(a+)+`。
+        // 2. 【黑名单】（如过滤 "DROP TABLE"）：极度危险！黑客总能找到变体（如 "DrOp  tABle"、URL编码）绕过。
+        // 3. 【白名单】（如下方的任务类型校验）：最高安全级别！只允许已知的安全值，非预期值一律拦截。
         if ok, _ := regexp.MatchString(`^[\d\*\/\-\,\s]{9,64}$`, t.CronExpr); !ok {
             return "cron表达式格式无效"
         }
@@ -64,6 +93,7 @@ func validateTask(t *model.Task) string {
     t.TaskType = strings.TrimSpace(t.TaskType)
     switch t.TaskType {
     case "shell", "http", "cleanup", "healthcheck":
+        // 采用【白名单校验】防御非法类型输入
     case "":
         t.TaskType = "shell"
     default:
@@ -97,6 +127,13 @@ func validateTask(t *model.Task) string {
 // 路由：GET /api/tasks?page=1&page_size=20&search=关键词
 func (h *TaskHandler) ListTasks(c *gin.Context) {
     // 从URL参数中读取页码，默认第1页
+    // 💀 【踩坑血泪·反面教材】
+    // strconv.Atoi 忽略错误的模式：`page, _ := strconv.Atoi(...)`
+    // 真实生产事故：如果黑客恶意传入 ?page=9999999999999999999999 （超出整数范围），
+    // 或者 ?page=abc，这里 Atoi 会返回 0 和 error。由于忽略了 error，page 变成了 0。
+    // 虽然下方有 `if page < 1 { page = 1 }` 兜底保命，但如果不小心漏写这行兜底，
+    // SQL 引擎执行 LIMIT/OFFSET 计算时就可能出现负数，导致数据库直接报错甚至进程崩溃。
+    // 推荐做法：明确处理 error，如果有错直接返回 400 Bad Request，拦截恶意参数。
     page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))         // 字符串转整数，Atoi = ASCII to Integer
     // 从URL参数中读取每页数量，默认20条
     pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -140,6 +177,18 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
         return
     }
     if err := h.TaskSvc.CreateTask(&task); err != nil {          // 调用服务层保存任务到数据库
+        // 📌 【大厂面试·核心考点】
+        // 面试官：业务里如何防御 SQL 注入？底层原理是什么？
+        // 标准答案：
+        // 1. 参数化查询 (Parameterized Query)：这是防注入的根本。MySQL 驱动收到带 `?` 的预编译 SQL 后，
+        //    会将 SQL 结构与数据参数分开解析。不管参数里有多少个单引号或 `DROP TABLE`，都会被纯粹当成值对待，无法修改语法树。
+        // 2. ORM 层防御：底层 GORM 的 `db.Create(&task)` 默认全部使用参数化查询，杜绝了拼接 SQL 引发的注入。
+        // 🚨 警惕：若在 GORM 中滥用 `db.Raw("...WHERE name = " + req.Name)` 仍会被注入。
+
+        // ⚡ 【性能实战·生产调优】 HTTP 状态码语义规范
+        // 此处创建失败如果返回 400 Bad Request，说明是客户端传参有误（例如唯一键冲突、字段超长）。
+        // 4xx 代表客户端错误，5xx 代表服务端错误（如数据库连不上）。
+        // 严格的 API 应该解析 err 的具体类型，如果是 DB 挂了应返回 500，不能笼统兜底为 400，影响链路监控的准确定位。
         respondError(c, http.StatusBadRequest, err.Error()) // 保存失败（比如名字重复）
         return
     }
@@ -393,6 +442,18 @@ func (h *TaskHandler) KillTask(c *gin.Context) {
 // 路由：GET /api/tasks/:id/stream?offset=N
 // offset: 从第 N 字节开始读取（0=全量），用于增量轮询
 // 响应包含 daemon 状态快照（仅当任务受 DaemonMonitor 管理时）
+//
+// 🏗️ 【架构设计·模式对比】
+// 【流式数据传输：轮询 vs SSE vs WebSocket】
+// 本接口名为 Stream，但实质是【客户端增量轮询 (HTTP Polling)】：客户端每隔几秒带 offset 请求一次。
+// - 缺点：大量无效的 HTTP 握手开销；频繁新建连接消耗服务端资源；实时性受轮询间隔限制。
+// 生产环境流式传输优化方案对比：
+// 1. SSE (Server-Sent Events): 
+//    - 底层：单向通道（服务端 -> 客户端），基于普通 HTTP 协议，设置 `Content-Type: text/event-stream`。
+//    - 优点：完美契合"服务端只管发日志"场景，轻量，原生支持浏览器断线重连，对 Nginx 代理友好。
+// 2. WebSocket:
+//    - 底层：双向全双工通信，协议升级（HTTP -> WS）。
+//    - 优点：实时性极强。缺点：需要维持心跳、开发成本较高，对于单向日志推送显得大材小用。
 func (h *TaskHandler) StreamTaskLog(c *gin.Context) {
     id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
     offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
