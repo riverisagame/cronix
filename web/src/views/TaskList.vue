@@ -1305,8 +1305,14 @@ onUnmounted(() => {
 
 /* 表格行 hover 增强 */
 :deep(.el-table__body tr:hover > td) {
-  box-shadow: inset 0 0 0 1px var(--primary-color);
+  box-shadow: inset 0 1px 0 var(--primary-color), inset 0 -1px 0 var(--primary-color);
   transition: box-shadow 0.15s ease;
+}
+:deep(.el-table__body tr:hover > td:first-child) {
+  box-shadow: inset 0 1px 0 var(--primary-color), inset 0 -1px 0 var(--primary-color), inset 1px 0 0 var(--primary-color);
+}
+:deep(.el-table__body tr:hover > td:last-child) {
+  box-shadow: inset 0 1px 0 var(--primary-color), inset 0 -1px 0 var(--primary-color), inset -1px 0 0 var(--primary-color);
 }
 
 /* Retries 信息标签 */
