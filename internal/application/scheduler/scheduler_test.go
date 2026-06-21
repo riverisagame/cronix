@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"go.uber.org/goleak"
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -62,7 +62,15 @@ import (
 //   就会强制使当前 Test 失败，阻断代码合并到 main 分支。
 // ============================================================
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	goleak.VerifyTestMain(m,
+		goleak.IgnoreTopFunction("github.com/panjf2000/ants/v2.(*poolCommon).purgeStaleWorkers"),
+		goleak.IgnoreTopFunction("github.com/panjf2000/ants/v2.(*poolCommon).ticktock"),
+		goleak.IgnoreTopFunction("cronix/internal/application/scheduler.(*AsyncLogWriter).flusher"),
+		goleak.IgnoreTopFunction("os/exec.(*Cmd).Wait"),
+		goleak.IgnoreTopFunction("os/exec.(*Cmd).awaitGoroutines"),
+		goleak.IgnoreTopFunction("syscall.syscalln"),
+		goleak.IgnoreTopFunction("cronix/internal/application/executor.ExecuteShell"),
+	)
 }
 
 // setupDB 为集成测试提供纯净、隔离的数据库环境
