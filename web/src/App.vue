@@ -224,28 +224,30 @@ const isLoginPage = computed(() => route.path === '/login')
 </script>
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap');
+
 /*
   全局样式（不带 scoped 属性，会应用到整个网站）
-
-  设置 body 元素的基础样式：
-  - margin: 0 去掉浏览器默认的外边距
-  - font-family 设置字体优先级：Helvetica Neue（英文字体）> PingFang SC（苹果中文）> Hiragino Sans GB（旧苹果中文）
-    > Microsoft YaHei（微软雅黑）> Arial（通用英文字体）> sans-serif（系统默认无衬线字体）
 */
 :root {
-  --bg-color: #050505; /* Almost true black for maximum contrast */
-  --surface-color: #171717; /* Very dark gray for cards */
-  --primary-color: #3B82F6; /* Kept bright blue for CTA */
-  --secondary-color: #60A5FA;
-  --cta-color: #F97316;
-  --text-main: #FFFFFF; /* Pure white for maximum readability */
-  --text-secondary: #D4D4D8; /* Light gray to maintain high contrast */
-  --border-color: #3F3F46; /* Noticeable borders */
+  --bg-color: #0F172A; /* Slate 900 - Deep dark background */
+  --surface-color: #1E293B; /* Slate 800 - Card surfaces */
+  --primary-color: #F59E0B; /* CEX Gold */
+  --secondary-color: #FBBF24;
+  --cta-color: #8B5CF6; /* CEX Vibrant Purple */
+  --text-main: #F8FAFC; 
+  --text-secondary: #94A3B8;
+  --border-color: #334155; 
   --success-color: #10B981;
   --error-color: #EF4444;
   --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
-  --font-sans: 'Fira Sans', 'Helvetica Neue', Helvetica, sans-serif;
+  --font-sans: 'Exo 2', 'Helvetica Neue', Helvetica, sans-serif;
+  --font-display: 'Orbitron', sans-serif;
   
+  --cex-bg-dark: #0F172A;
+  --cex-primary-gold: #F59E0B;
+  --cex-accent-purple: #8B5CF6;
+
   /* Element Plus Variables Override for Dark Mode */
   --el-bg-color: var(--bg-color);
   --el-bg-color-overlay: var(--surface-color);
@@ -257,7 +259,7 @@ const isLoginPage = computed(() => route.path === '/login')
   --el-border-color-lighter: var(--border-color);
   --el-fill-color-blank: var(--surface-color);
   --el-fill-color: var(--border-color);
-  --el-fill-color-light: #262626; /* Hover effects for buttons/inputs */
+  --el-fill-color-light: #334155; /* Hover effects for buttons/inputs */
 }
 
 body {
