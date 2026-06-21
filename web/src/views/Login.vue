@@ -1,46 +1,13 @@
 <template>
   <div class="cex-landing">
-    <!-- Header / Nav -->
-    <header class="landing-header">
-      <div class="logo">
-        <el-icon><Monitor /></el-icon>
-        <span class="logo-text">CRONIX</span>
-      </div>
-      <div class="market-ticker">
-        <span class="ticker-item down"><span class="pair">BTC/USDT</span> 64,231.50 <span class="change">-1.2%</span></span>
-        <span class="ticker-item up"><span class="pair">ETH/USDT</span> 3,482.10 <span class="change">+2.4%</span></span>
-        <span class="ticker-item up"><span class="pair">SOL/USDT</span> 145.20 <span class="change">+5.1%</span></span>
-      </div>
-    </header>
-
     <main class="landing-content">
-      <!-- Left: Marketing / Hero -->
-      <div class="hero-section">
-        <h1 class="hero-title">Trade the Future, Task the Present</h1>
-        <p class="hero-subtitle">The most advanced execution engine for professional task scheduling and distributed workloads.</p>
-        
-        <div class="features-grid">
-          <div class="feature-card">
-            <el-icon class="feature-icon"><Lock /></el-icon>
-            <h3>Bank-Grade Security</h3>
-            <p>End-to-End Encryption & cold storage architecture for your task metadata.</p>
-          </div>
-          <div class="feature-card">
-            <el-icon class="feature-icon"><Lightning /></el-icon>
-            <h3>Ultra-Low Latency</h3>
-            <p>Microsecond precision execution engine with 99.99% uptime guarantee.</p>
-          </div>
-          <div class="feature-card">
-            <el-icon class="feature-icon"><DataLine /></el-icon>
-            <h3>Advanced Analytics</h3>
-            <p>Real-time telemetry and deep metrics for every execution flow.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right: Login Form (Glassmorphism) -->
+      <!-- Login Form (Glassmorphism) -->
       <div class="login-container">
         <div class="glass-card login-box">
+          <div class="logo-simple">
+            <el-icon><Monitor /></el-icon>
+            <span class="logo-text">CRONIX</span>
+          </div>
           <h2 class="login-title">Welcome Back</h2>
           <p class="login-desc">Sign in to access your secure dashboard</p>
 
@@ -116,7 +83,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Monitor, User, Key, Lock, Lightning, DataLine } from '@element-plus/icons-vue'
+import { Monitor, User, Key } from '@element-plus/icons-vue'
 import { authAPI } from '../api'
 
 const router = useRouter()
@@ -197,130 +164,37 @@ async function handleLogin() {
   100% { transform: scale(1.2) translate(-50px, 50px); opacity: 0.5; }
 }
 
-.landing-header {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 40px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(20px);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-main);
-  letter-spacing: 2px;
-}
-.logo .el-icon {
-  color: var(--cex-primary-gold);
-}
-
-.market-ticker {
-  display: flex;
-  gap: 30px;
-  font-family: var(--font-mono);
-  font-size: 14px;
-}
-.ticker-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ticker-item .pair {
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-.ticker-item.up { color: var(--success-color); }
-.ticker-item.down { color: var(--error-color); }
-
 .landing-content {
   position: relative;
   z-index: 10;
   flex: 1;
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 60px;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 80px 40px;
-  align-items: center;
-}
-
-.hero-section {
   display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
-
-.hero-title {
-  font-family: var(--font-display);
-  font-size: 64px;
-  line-height: 1.1;
-  font-weight: 700;
-  margin: 0;
-  background: linear-gradient(135deg, #FFFFFF 0%, #94A3B8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.hero-subtitle {
-  font-size: 20px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  max-width: 80%;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-top: 40px;
-}
-
-.feature-card {
-  background: rgba(30, 41, 59, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  padding: 24px;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-}
-.feature-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(245, 158, 11, 0.3);
-  box-shadow: 0 10px 30px -10px rgba(245, 158, 11, 0.15);
-}
-
-.feature-icon {
-  font-size: 32px;
-  color: var(--cex-primary-gold);
-  margin-bottom: 16px;
-}
-.feature-card h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 10px 0;
-  color: var(--text-main);
-}
-.feature-card p {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.5;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 20px;
 }
 
 /* Login Form Area */
 .login-container {
   display: flex;
   justify-content: center;
+  width: 100%;
+}
+
+.logo-simple {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+}
+.logo-simple .el-icon {
+  color: var(--cex-primary-gold);
 }
 
 .glass-card {
@@ -330,9 +204,9 @@ async function handleLogin() {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-radius: 24px;
-  padding: 40px;
+  padding: 50px 60px;
   width: 100%;
-  max-width: 440px;
+  max-width: 500px; /* Made it a bit larger */
 }
 
 .login-title {
@@ -346,7 +220,7 @@ async function handleLogin() {
   color: var(--text-secondary);
   text-align: center;
   margin: 0 0 32px 0;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .glass-input :deep(.el-input__wrapper) {
@@ -354,7 +228,7 @@ async function handleLogin() {
   border-radius: 12px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
   padding: 0 16px;
-  height: 50px;
+  height: 56px; /* Larger input */
 }
 .glass-input :deep(.el-input__wrapper.is-focus) {
   box-shadow: inset 0 0 0 1px var(--cex-primary-gold) !important;
@@ -364,11 +238,14 @@ async function handleLogin() {
   color: var(--text-main);
   font-size: 16px;
 }
+.glass-input :deep(.el-input__prefix-inner) {
+  font-size: 20px;
+}
 
 .cex-btn {
-  height: 54px;
+  height: 56px;
   border-radius: 12px;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 0.5px;
   background: linear-gradient(135deg, var(--cex-primary-gold), #D97706) !important;
@@ -391,7 +268,7 @@ async function handleLogin() {
 .login-footer {
   margin-top: 24px;
   text-align: center;
-  font-size: 14px;
+  font-size: 15px;
 }
 .forgot-link {
   color: var(--text-secondary);
@@ -421,16 +298,9 @@ async function handleLogin() {
 .w-full { width: 100%; }
 
 /* Responsive adjustments */
-@media (max-width: 1024px) {
-  .landing-content {
-    grid-template-columns: 1fr;
-    text-align: center;
-    gap: 40px;
-    padding: 40px 20px;
+@media (max-width: 600px) {
+  .glass-card {
+    padding: 40px 30px;
   }
-  .hero-title { font-size: 48px; }
-  .hero-subtitle { max-width: 100%; margin: 0 auto; }
-  .features-grid { justify-content: center; }
-  .market-ticker { display: none; } /* Hide ticker on small screens */
 }
 </style>
