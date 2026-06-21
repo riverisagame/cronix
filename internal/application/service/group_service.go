@@ -1,6 +1,16 @@
 // ============================================================
 // internal/application/service/group_service.go - 任务组业务逻辑服务
 //
+// 🏗️ 【架构设计·模式对比：事务聚合 (Unit of Work) 与领域驱动设计】
+// 在这里，GroupService 扮演了应用服务（Application Service）的角色。
+// 它通过事务聚合（Unit of Work）模式，确保领域模型的状态变更与外部系统（如调度引擎、缓存）的一致性。
+// 相比于传统的 ActiveRecord 模式，这种设计将业务逻辑与数据访问解耦，使得服务更容易测试和扩展。
+// 
+// 🛡️ 【安全攻防·漏洞防线：级联操作的业务一致性保障】
+// 在处理包含子元素的领域实体（如 TaskGroup 包含多个 Task）时，级联操作（如删除组时更新任务状态）极易出现数据孤岛。
+// 本服务通过严格的数据库事务（DB Transaction）结合应用层的手动补偿机制（如更新内存调度器），
+// 构筑了“数据库物理一致性 + 应用层逻辑一致性”的双重防线，防止出现脏任务（属于已删除组的任务被错误执行）。
+//
 // 【纳米级源码说明书 - 业务篇】
 // 这里的角色是“项目组HR主管”。
 // 负责组建项目组（TaskGroup）、修改组属性、解散项目组、分配组成员（Task）。
@@ -69,6 +79,11 @@ func (s *GroupService) GetGroup(id uint) (*model.TaskGroup, error) {
 }
 
 // CreateGroup 创建一个新项目组
+//
+// 🔬 【底层原理·深度剖析：内存与存储的双写一致性】
+// 创建操作本身较为简单，只有单一表的写入。然而，这里涉及到了"写库 -> 内存引擎更新 -> 缓存清除"的三步走策略。
+// 若第二步或第三步失败，是否需要回滚第一步的写库操作？
+// 在当前设计中，为了避免分布式事务的复杂性（如两阶段提交 2PC），采用了"最大努力通知 (Best-Effort Delivery)"机制，允许瞬间的不一致，通过缓存 TTL 和重启加载等手段实现最终一致性。
 func (s *GroupService) CreateGroup(g *model.TaskGroup) error {
 	// 【数据校验】名字不能为空
 	if g.Name == "" {
@@ -99,6 +114,18 @@ func (s *GroupService) CreateGroup(g *model.TaskGroup) error {
 }
 
 // UpdateGroup 更新项目组信息
+//
+// 📌 【大厂面试·核心考点：并发场景下对同一个组修改的乐观锁 (Optimistic Locking) 控制机制】
+// 面试官问：如果两个管理员同时编辑同一个组，会不会出现互相覆盖（Lost Update 丢失更新）的情况？
+// 标准答案：
+// 1. 当前实现使用了 GORM 的 Updates 方法进行局部更新（Patch），在一定程度上缓解了全量覆盖的问题，但仍存在状态不一致风险。
+// 2. 生产级优化（乐观锁）：通常会在表结构中引入 `version` 字段。更新时加上条件 `UPDATE groups SET ..., version = version + 1 WHERE id = ? AND version = 旧版本号`。
+//    如果影响行数为 0，说明数据在中途被其他人改了，系统直接返回 `ErrConcurrentUpdate` 或 HTTP 409 Conflict，提示用户刷新后重试。
+//
+// 💀 【踩坑血泪·反面教材：脏写覆盖】
+// 曾有系统允许用户A和B同时打开组配置页面。A把模式改为了"串行"，B没有修改模式，但修改了组名并保存。
+// 如果用全量结构体保存（Save），B保存时会带上旧的"并行"模式，导致A的修改被无声覆盖。
+// 这里通过 map[string]interface{} 只更新指定字段，避免了部分并发覆盖问题，但对于高度敏感状态依然需要乐观锁保护业务一致性。
 func (s *GroupService) UpdateGroup(id uint, updates map[string]interface{}) error {
 	if mode, ok := updates["mode"].(string); ok {
 		if mode != "parallel" && mode != "sequential" {
@@ -128,6 +155,18 @@ func (s *GroupService) UpdateGroup(id uint, updates map[string]interface{}) erro
 
 // DeleteGroup 解散项目组
 // 返回值：受影响的任务数、删除的组日志数、错误信息
+//
+// 🔬 【底层原理·深度剖析：事务聚合 (Unit of Work) 与级联操作的业务一致性保障】
+// 这个方法是 Unit of Work 模式的经典体现。解散一个组不仅是删一条记录，而是牵一发而动全身：
+// 1. 任务解绑：切断 Task 与 Group 的级联关联。
+// 2. 历史清理：删除 GroupExecutionLog。
+// 3. 实体销毁：删除 Group 本身。
+// 任何一步失败，必须全盘回滚。MySQL 在底层会分配一个事务 ID（XID），并在 Undo Log 记录所有前置镜像（Before Image）。
+// 只要不执行 COMMIT，其他会话（基于 Read Committed 或 Repeatable Read 隔离级别）看不到中间状态。这即是保证业务一致性的底层基石。
+//
+// ⚡ 【性能实战·生产调优：大事务的危害】
+// 此处的级联操作中，如果 logCount 达到百万级别，`Delete` 操作会长期持有行锁（甚至锁表），导致数据库主从延迟飙升、其他服务雪崩。
+// 生产调优手段：把同步的硬删除（Hard Delete）改为异步软删除（Soft Delete），或者分批删除（Batch Delete），把大事务拆散为多个小事务。
 func (s *GroupService) DeleteGroup(id uint) (int64, int64, error) {
 	var taskCount, logCount int64
 
@@ -175,6 +214,17 @@ func (s *GroupService) GetGroupMembers(groupID uint) ([]model.Task, error) {
 
 // SetGroupMembers 调整组成员名单（重新洗牌）
 // taskIDs 是最新的、按顺序排好的任务 ID 列表
+//
+// 🧪 【测试工程·质量保障：Mock 与 物理零污染】
+// 测试此复杂级联操作时，必须采用 Mock 机制（如 sqlmock）或使用隔离的测试数据库。
+// 如果直接在开发库跑测试代码，不仅可能破坏真实的 `group_id` 关系，还会误触发 `Engine.UpdateTaskSchedule`，
+// 导致真实的调度器被注入脏数据（Meta-Test 的绝对禁忌）。
+// 
+// 🏗️ 【架构设计·模式对比：全量覆写 vs 增量更新】
+// 这里采用了“全量清空 + 重新绑定”的模式，并在外层包裹了数据库事务 (DB.Transaction) 成为一个 Unit of Work。
+// 优点：代码极其简单，天然防止遗漏，保证绝对的业务一致性保障；
+// 缺点：如果组成员有1000个，但只调整了其中1个的位置，却要更新1000次记录。
+// 生产架构设计中，若列表极长，应该采用“计算 Diff (增删改)”的增量更新策略，以降低 DB 写入压力，防止产生过长的事务锁定。
 func (s *GroupService) SetGroupMembers(groupID uint, taskIDs []uint) error {
 	// 1. 先查出“调休前”属于这个组的旧名单。
 	// 为什么要查？因为有些人可能被踢出去了，有些人可能刚拉进来。等会儿要通知车间主任更新这些人的班表。

@@ -6,16 +6,27 @@
 // 负责在代码上线前，通过自动化脚本模拟真实用户的操作，
 // 确保不管怎么折腾，程序都不会崩溃。
 // 
-// 💡 【大厂面试·底层原理扩展（初二小白版）】
-// 面试官问：什么是单元测试里的 Setup 和 Teardown（清理）？为什么要用内存数据库？
-// 答（小白比喻）：
+// 💡 【生活比喻·初二小白版】
 // 假设你要测试一个“切菜机器人”。
-// 错误做法：直接拿厨房里你晚上准备吃的萝卜去切（在真实数据库里测）。万一切坏了，你今晚就没饭吃了。
+// 错误做法：直接拿厨房里你晚上准备吃的真萝卜去切（在真实数据库里测）。万一切坏了，你今晚就没饭吃了。
 // 正确做法：
-// 1. Setup（准备）：拿一根塑料假萝卜（内存 SQLite 数据库 `sqlite.Open("file::memory:?cache=shared")` 或者临时文件库）。
+// 1. Setup（准备）：拿一根塑料假萝卜（临时 SQLite 数据库）。
 // 2. Test（测试）：让机器人去切假萝卜。
-// 3. Teardown/Cleanup（打扫战场）：测试完把碎塑料扫进垃圾桶（删除临时库、关闭连接 `sqlDB.Close()`）。
+// 3. Teardown/Cleanup（打扫战场）：测试完把碎塑料扫进垃圾桶（删除临时文件，关闭连接）。
 // 这样每次测试都是全新的，绝对不会污染真实数据！
+//
+// 📌 【大厂面试·核心考点】
+// 面试官：Go语言中的测试有哪些高级玩法？如何保证测试质量？
+// 标准答案：
+// 1. 表驱动测试（Table-driven tests）：将测试数据和期望结果抽离为 slice of structs，通过 for 循环执行。极大提高测试用例的覆盖密度和代码复用率。
+// 2. 并发测试（Concurrency testing）：利用 sync.WaitGroup 和 goroutine 模拟高并发，配合 race detector 发现数据竞争。特别是验证乐观锁（如基于 version 字段的 CAS 操作）失败重试机制时必不可少。
+// 3. Mock 与依赖注入：对外部依赖（网络、时间、随机数）进行接口抽象，避免测试产生外部副作用。
+//
+// 🏗️ 【架构设计·模式对比】
+// 为什么测试代码也需要架构设计？
+// 1. 隔离性（Isolation）：每个单元测试必须相互独立，采用临时SQLite文件库做到“物理零污染”。
+// 2. 幂等性（Idempotence）：无论运行多少次，测试结果必须一致。
+// 3. 真实性（Fidelity）：即使是内存/临时库，也要尽可能模拟真实的存储引擎和锁机制，否则无法复现生产级的脏写（Dirty Write）。
 // ============================================================
 package service
 
@@ -31,6 +42,17 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// 🔬 【底层原理·深度剖析】
+// 为什么使用 t.TempDir() 和 sqlite.Open()？
+// 1. OS 级物理隔离：t.TempDir() 会在操作系统的临时目录下创建一个唯一目录，测试结束时由 Go runtime 的 cleanup 机制自动清理（os.RemoveAll）。这就保证了测试后的“物理零污染”，数据毫无残留。
+// 2. SQLite 轻量级化：不需要启动真实的 MySQL 进程，减少 I/O 和网络开销，提高 CI 跑单测的速度。
+// 3. 连接池兜底：即使是测试，GORM 依然维护了连接池。通过 t.Cleanup() 注册 sqlDB.Close()，确保在测试发生 panic 时也能释放文件句柄，避免 "too many open files" 的系统级错误。
+//
+// 💀 【踩坑血泪·反面教材】
+// 真实事故：某实习生在单测中直连了开发环境的 MySQL 数据库，并且在 teardown 时执行了 `DB.Exec("DELETE FROM tasks")`。
+// 结果其他同事正在开发环境造好的测试数据被删得一干二净，导致整个团队停工半天排查数据丢失原因。
+// 铁律：永远不要在单元测试中连接并修改外部共享的基础设施！
+//
 // setupGroupTestDB 就是上面的“准备假萝卜”的步骤
 func setupGroupTestDB(t *testing.T) *gorm.DB {
 	t.Helper() // 告诉 Go 语言：如果这里报错了，请打印调用这个函数的行号，而不是这里的行号
@@ -93,6 +115,15 @@ func TestGroupCRUD(t *testing.T) {
 	}
 
 	// 3. Update - 测试更新组
+	// 🔬 【底层原理·深度剖析】（乐观锁失败重试与并发测试预警）
+	// 在高并发场景下，如果两个管理员同时 UpdateGroup 怎么处理？
+	// 实际生产中通常会引入“乐观锁（Optimistic Locking）”：UPDATE groups SET mode=?, version=version+1 WHERE id=? AND version=?.
+	// 如何编写乐观锁的并发测试？
+	// a. 准备一个 sync.WaitGroup 和 channel 阻塞器。
+	// b. 启动 10 个 goroutine，同时阻塞在 channel 接收端。
+	// c. close(channel) 让 10 个 goroutine 瞬间并发执行 UpdateGroup。
+	// d. 断言：应该只有一个 goroutine 成功，其余 9 个收到 ErrOptimisticLock，然后触发 for 循环重试（Backoff退避策略）。
+	// e. 必须使用 `go test -race` 保证业务逻辑本身没有读写竞争。
 	if err := svc.UpdateGroup(g.ID, map[string]interface{}{"mode": "sequential"}); err != nil {
 		t.Fatalf("update group: %v", err)
 	}
@@ -142,7 +173,27 @@ func TestGroupMembers(t *testing.T) {
 		t.Errorf("expected 0 members after clear, got %d", len(members))
 	}
 
+	// 🧪 【测试工程·质量保障】
+	// 当前这种把测试逻辑按顺序平铺的写法（Sequential Scripting），在验证简单的流程时很直观。
+	// 但如果我们要测试复杂的“级联操作（Cascade）”的多种边界场景（比如：组内有0个任务、有1000个任务、任务跨组等），
+	// 业界最佳实践是使用“表驱动测试（Table-driven tests）”进行重构：
+	//
+	// tests := []struct {
+	//     name       string         // 场景名
+	//     setup      func(*gorm.DB) // 准备不同的级联前置数据
+	//     expectErr  bool           // 是否期待失败
+	//     verify     func(*gorm.DB) // 验证级联后遗留数据的状态
+	// }{ ... }
+	//
+	// 通过 for _, tt := range tests { t.Run(tt.name, tt.action) } 执行。
+	// 增加新的异常场景只需在 slice 中加一行配置，代码复用率极高且符合“物理零污染”的隔离原则。
+	
 	// Delete group unlinks remaining members - 测试级联解绑
+	// ⚡ 【性能实战·生产调优】
+	// “级联解绑”到底干了什么？底层 SQL 是：UPDATE tasks SET group_id = NULL WHERE group_id = ?
+	// 1. 时间复杂度：如果 tasks 表的 group_id 没有建立索引，这将触发全表扫描（O(N)），在百万级任务表里会引发慢查询甚至死锁！
+	// 2. 生产优化：在 model.Task 的 group_id 字段上必须建立普通索引 `idx_group_id`。
+	// 
 	// 先把任务再加回去，然后直接把整个组干掉
 	svc.SetGroupMembers(g.ID, taskIDs)
 	_, _, _ = svc.DeleteGroup(g.ID)
@@ -155,9 +206,20 @@ func TestGroupMembers(t *testing.T) {
 }
 
 // TestGroupValidation 测试非法数据拦截
+// 🛡️ 【安全攻防·漏洞防线】
+// 所有的外部输入都是不可信的！如果不做校验，空名字和非法模式会直接打穿数据库，导致后续查询调度发生“越界访问”或“空指针崩溃”。
+// 这里的校验就是业务系统的第一道防线。
 func TestGroupValidation(t *testing.T) {
 	db := setupGroupTestDB(t)
 	svc := &GroupService{DB: db}
+
+	// 🧪 【测试工程·质量保障】
+	// 以下三个校验逻辑，虽然能测，但代码大量重复（Copy-Paste）。
+	// 理想情况下，这种“验证不同非法输入”的逻辑，是采用【表驱动测试】的绝佳候选地！
+	// 如果用表驱动改造，只需要定义：
+	// { "空名字拦截", &model.TaskGroup{Name: "", Mode: "parallel"} },
+	// { "非法模式拦截", &model.TaskGroup{Name: "bad-mode", Mode: "invalid"} },
+	// 然后通过 for 循环执行 svc.CreateGroup。
 
 	// 空名字不准建组
 	if err := svc.CreateGroup(&model.TaskGroup{Name: "", Mode: "parallel"}); err == nil {

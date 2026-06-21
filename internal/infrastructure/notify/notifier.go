@@ -43,6 +43,11 @@ type NotifyEvent struct {
 }
 
 // Notifier 通知发送器，在后台异步处理通知
+// 
+// 🏗️ 【架构设计·模式对比】基于 Channel 的 Actor 模式思想
+// 这里将通道 (notifyCh) 作为结构体内部状态，并且唯一通过一个统一的主循环 (Start) 去消费它。
+// 这暗合了并发模型中的 Actor 模型理念：通过消息传递来共享内存，而不是通过共享内存来通信。
+// 完全消除了互斥锁（Mutex）的使用，极大提升了高并发下的无锁运行效率。
 type Notifier struct {
     notifyCh chan NotifyEvent   // 通知事件通道：其他地方把事件发到这里
     retry    int                // 发送失败时的重试次数
@@ -53,6 +58,18 @@ type Notifier struct {
 // New 创建一个新的通知发送器
 // 参数 retry：发送失败时最多重试几次
 // 参数 interval：每次重试之间等多久
+//
+// 🏗️ 【架构设计·模式对比】工厂模式与极致解耦
+// 这里使用了简单工厂模式（Simple Factory Pattern）创建 Notifier 实例。
+// 面试官会问：为什么要用 New 函数返回结构体指针，而不让调用者直接初始化 Notifier{}？
+// 标准答案：
+// 1. 封装复杂性：调用者不需要知道内部需要初始化 ants.Pool 和 channel，只需传入核心业务参数（重试与间隔）。这种面向接口/抽象编程实现了高度解耦。
+// 2. 强制校验与默认值：在 New 内部统一接管并约束底层资源，比如协程池大小（50）和通道缓冲（256），防止外部乱传参数导致系统崩溃。
+// 3. 内存逃逸优化：返回指针可以避免结构体在传参时发生值拷贝，Go 编译器会通过逃逸分析将其分配在堆区（Heap）。
+//
+// ⚡ 【性能实战·生产调优】通道缓冲与协程池容量的深度权衡
+// - channel 缓冲区设为 256：当突然产生大量任务通知（脉冲流量）时，256 个缓冲位是“第一道大坝”，起到【异步削峰】作用，避免主业务逻辑发通知被阻塞。
+// - ants 协程池设为 50：这是“第二道大坝”。即使遇到目标 Webhook 接口严重超时（比如卡死 10 秒），最多只有 50 个工作协程被挂起，绝对不会无脑创建成千上万个 Goroutine 吃光服务器内存（防止 OOM）。
 func New(retry int, interval time.Duration) *Notifier {
     pool, _ := ants.NewPool(50) // 容量50，最大并发发50个通知
     return &Notifier{
@@ -71,6 +88,18 @@ func (n *Notifier) NotifyChan() chan<- NotifyEvent {
 
 // Start 启动通知发送器的主循环
 // 参数 ctx：上下文，当ctx取消时，通知发送器会停止
+//
+// 🔬 【底层原理·深度剖析】异步网络请求的 Goroutine 泄漏预防
+// 面试官极度爱考的并发题：如何优雅地关闭一个后台运转的 Goroutine？如果不关会怎样？
+// 标准答案：
+// 必须使用 context.Context 搭配 select 多路复用。如果这个 Start 的 for 循环只监听 n.notifyCh，
+// 当主程序试图平稳重启、或者取消该通知模块时，这个 for 循环将永远阻塞在等待通道输入上，无法退出。这就构成了 Goroutine 泄漏！
+// 长时间运行后，泄漏的僵尸协程会不断堆积，导致 CPU 调度压力激增和内存彻底溢出（OOM）。
+// 
+// 🛡️ 【安全攻防·漏洞防线】优雅退出的“擦屁股”工程
+// `n.pool.Release()` 这一句极其关键！在监听到 ctx.Done()（即收到下线指令）时，不仅主协程要 return，
+// 还必须显式释放底层的 ants 协程池。否则池子内部维护的数十个 worker 协程依然会成为僵尸驻留在内存中。
+// 这就是资深工程师和新手的本质区别——有始有终，严格管理内存的生命周期。
 func (n *Notifier) Start(ctx context.Context) {
     for {                                                        // 无限循环，不断从通道读取事件
         select {
@@ -95,6 +124,23 @@ func (n *Notifier) send(event NotifyEvent) {
 
 // sendWebhook 发送Webhook通知（带重试机制）
 // Webhook = 向一个URL发送HTTP POST请求，把通知内容发给外部系统
+//
+// 📌 【大厂面试·核心考点】高可用重试机制：指数退避与抖动 (Exponential Backoff + Jitter)
+// 当前代码出于演示极简，使用的是固定频率的线性重试（每次 time.Sleep(n.interval)）。
+// 终极连环问：如果接收方服务器因为流量过大崩溃重启了，你采用固定1秒重试，千万个客户端同时重试会发生什么？
+// 答：
+// 会引发惨烈的“雪崩效应”（Thundering Herd Problem，惊群效应）。对方服务器刚缓过来，海量 HTTP 瞬间并发又把它打成宕机状态。
+// 
+// 真实生产环境（如 AWS、支付宝的异步通知）标准做法是：
+// 1. 指数退避 (Exponential Backoff)：每次重试的等待时间呈指数级增加（例如 1s, 2s, 4s, 8s, 16s），给对方留出足够的时间恢复元气。
+// 2. 随机抖动 (Jitter)：在退避时间基础上加上一个随机的微小偏移量（比如 4s + 123ms）。打散重试分布，防止所有客户端在同一个绝对时间点发起重试，从而彻底削平流量尖刺。
+//
+// 💀 【踩坑血泪·反面教材】关于 HTTP 客户端的超级大坑
+// 仔细看代码 `http.Post`！这是使用了 Go 原生的默认 http 客户端。
+// 灾难级漏洞：Go 默认的 http.Client **没有超时时间** (Timeout = 0)！
+// 如果目标 Webhook 服务器建立了 TCP 连接，但故意或因死锁不返回任何数据响应，
+// 这个 `http.Post` 会永远永远地挂起（Hold 住）。最终结果：ants 协程池里的 50 个 worker 被全部榨干卡死，系统丧失所有通知能力！
+// 生产级铁律：发起外部网络请求，必须自定义带 Timeout 的 http.Client！（如 client := &http.Client{Timeout: 10 * time.Second}）
 func (n *Notifier) sendWebhook(event NotifyEvent) {
     if event.Config.WebhookURL == "" {
         return // Hook URL 为空时不推送
@@ -119,6 +165,11 @@ func (n *Notifier) sendWebhook(event NotifyEvent) {
         if err != nil {                                           // 网络错误
             lastErr = err
         } else {                                                  // HTTP状态码不正常
+            // 💀 【踩坑血泪·反面教材】TCP 连接池泄漏与连接丢弃
+            // 很多新手只在请求成功时 Close()，如果请求失败忘记 Close() 会导致 fd（文件描述符）泄漏。
+            // 另外一个极度隐蔽的坑：如果不读取完 Body 剩余内容直接 Close()，Go 底层的 HTTP 库会强行中断并丢弃这个 TCP 连接，
+            // 导致无法使用 Keep-Alive 进行连接复用，进而在高并发时产生大量处于 TIME_WAIT 状态的 TCP 端口占用。
+            // 生产最优解：在 Close 前先清空管道数据 `io.Copy(io.Discard, resp.Body)`。
             resp.Body.Close()
             lastErr = fmt.Errorf("webhook returned status %d", resp.StatusCode)
         }
@@ -134,6 +185,15 @@ func (n *Notifier) sendWebhook(event NotifyEvent) {
 
 // sendEmail 发送邮件通知（占位符，需要配置SMTP才能使用）
 // SMTP = 简单邮件传输协议，用来发邮件的标准协议
+//
+// 🧪 【测试工程·质量保障】如何安全地测试外部通知组件？
+// 面试官问：在跑单元测试或本地开发时，难道真的要去发真实邮件/触发真实 Webhook 吗？
+// 答：绝对不行。强依赖外部网络会导致测试极其脆弱（Flaky Tests），且极易引发测试数据污染真实系统或造成垃圾邮件骚扰。
+// 
+// 标准做法（Mock 挡板测试）：
+// 必须提取出 Notifier 接口（interface），在业务代码里注入此接口。而在测试用例中注入 MockNotifier（空桩），
+// 仅仅验证“业务逻辑是否正确构造了邮件数据”并且“是否调用了 send 接口”，从物理层面完全切断对外侧的真实请求。
+// 这正是 TDD 中核心的边界隔断机制与依赖反转原则（DIP）的体现。
 func (n *Notifier) sendEmail(event NotifyEvent) {
     log.Warn().Str("to", event.Config.EmailTo).Str("task", event.TaskName).
         Msg("email notification stub - configure SMTP for production use")

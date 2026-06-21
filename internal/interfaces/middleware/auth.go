@@ -2,6 +2,24 @@
 // internal/interfaces/middleware/auth.go - 认证中间件
 // 中间件 = 在请求到达最终处理函数之前，先经过的一道"关卡"
 // 这里用来检查请求是否携带了合法的登录令牌（JWT）
+//
+// 🏗️ 【架构设计·模式对比】
+// JWT 无状态认证 vs 网关(Gateway)中心化认证：
+// 1. JWT无状态认证（当前方案）：
+//    - 优势：去中心化，服务器完全不存储Session状态，横向扩展（Scale-out）零成本。微服务场景下，各微服务只需共享Secret或公钥即可独立验签，性能极高。
+//    - 劣势：Token一旦签发，在有效期内无法被服务端主动撤销（除非引入额外的黑名单机制，但这会破坏纯无状态原则）。且载荷不可存放超大或敏感信息。
+// 2. 网关中心化认证：
+//    - 优势：所有请求由API Gateway统一拦截鉴权，结合Redis做Session/Token共享。踢人下线、强制封号等操作可以做到秒级阻断生效。
+//    - 劣势：每次请求都会对网关或Redis造成额外的网络开销，存在单点故障风险（SPOF）。整体架构更重，维护成本高，适合对安全性要求极高的金融级大型微服务集群。
+//
+// 📌 【大厂面试·核心考点】
+// 面试官问：JWT本身是无状态的，如果用户修改了密码或被管理员封号，怎么让该用户手中的JWT立刻强制失效？
+// 标准答案：纯无状态的JWT在设计上是做不到主动吊销的，必须引入状态辅助。常见的工业级解决方案有：
+// 1. Redis Token Revocation（黑名单机制）：在网关层拦截。用户登出或被封号时，将该JWT的JTI（唯一标识）存入Redis黑名单（设置TTL等于Token剩余有效期）。
+//    中间件每次验签通过后，需额外查一次Redis看是否在黑名单中。此方案牺牲了部分无状态优势和性能，但能完美实现踢人下线。
+// 2. 颁发版本号机制（User Versioning）：在DB用户表中增加一个 `jwt_version` 字段，JWT的Payload中也携带相同的 version。
+//    改密或封号时，数据库中的 `jwt_version` 自增。中间件验签时查库比对版本号，版本落后则直接判定Token失效。
+// 3. 双Token机制（Access Token + Refresh Token）：AT有效时间极短（如15分钟），RT较长（如7天）。日常请求用AT无状态验签，AT过期后用RT换新AT，服务端只要在换取环节去DB校验状态即可拦截。
 // ============================================================
 // 💡 【大厂面试·底层原理扩展（初二小白版）】
 // 
@@ -35,34 +53,50 @@
 package middleware
 
 import (
-    "net/http"      // HTTP状态码
-    "strings"       // 字符串处理：分割、查找
+    "net/http"      // HTTP状态码（底层原理：提供诸如 http.StatusUnauthorized 等标准化状态常量，避免源码中硬编码魔法数字，增强代码可读性与健壮性）
+    "strings"       // 字符串处理：分割、查找（性能提示：内部底层实现高度优化了内存分配，对于高频鉴权头字符串拆分操作非常高效）
 
-    "cronix/internal/infrastructure/config" // 配置模块：获取JWT密钥
+    "cronix/internal/infrastructure/config" // 配置模块：获取JWT密钥（安全准则：绝密信息必须从环境变量或配置中心动态加载，严禁硬编码在源码中）
 
-    "github.com/gin-gonic/gin"         // Gin框架
-    "github.com/golang-jwt/jwt/v5"     // JWT库：用于验证令牌的钢印是否合法
+    "github.com/gin-gonic/gin"         // Gin框架（底层原理：依赖 httprouter 的 Radix 树路由引擎，提供极速的请求分发，处理海量并发连接）
+    "github.com/golang-jwt/jwt/v5"     // JWT库：用于验证令牌的钢印是否合法（安全考量：使用现代 v5 版本，修复了早期版本遗留的一些签名算法混淆漏洞）
 )
 
 // AuthMiddleware 返回一个Gin中间件函数
 // 中间件的作用：在每个受保护的请求被处理之前，先检查用户是否已登录
 // 检查方式是查看请求头里有没有合法的JWT令牌
+// 
+// 🔬 【底层原理·深度剖析】
+// Gin 中的中间件链（Chain of Responsibility）机制是如何执行的？
+// Gin的中间件机制本质上是一个洋葱模型或责任链模式。所有的中间件和最终业务控制器Handler会被连续压入一个叫做 `HandlersChain` 的切片中。
+// c.Next() 的底层逻辑，其实是一个遍历 Handlers 的 for 循环（递增执行索引 c.index++）。
+// 当在当前中间件调用 `c.Next()` 时，相当于挂起当前的函数上下文，转去执行链条后面的 Handler；等后面所有的 Handler 都执行完毕返回后，再出栈继续执行 `c.Next()` 之后的剩余逻辑。
+// 当调用 `c.Abort()` 时，底层其实是将内部游标 `c.index` 修改为一个极大值（如常量 abortIndex = 63）。
+// 由于索引超过了切片界限，for 循环条件不再满足立刻终止，后续的所有控制器代码将被直接跳过，不再被执行。
 func AuthMiddleware() gin.HandlerFunc {
-    // 返回一个匿名函数，这就是Gin中间件的标准写法
-    // c 是上下文对象，包含了请求的所有信息
+    // 返回一个匿名函数，这就是Gin中间件的标准写法（闭包）
+    // c 是上下文对象，包含了原始的 Request 和 Response，贯穿了整条责任链，用于在不同中间件之间流转传递数据
     return func(c *gin.Context) {
         // 第一步：从请求头中获取 Authorization 字段
         // Authorization 是HTTP协议规定的认证信息存放位置
         authHeader := c.GetHeader("Authorization")               
         if authHeader == "" {                                    // 如果客人连手环都没戴
+            // 💀 【踩坑血泪·反面教材】
+            // 很多新人工程师处理拦截时，只写了 c.JSON() 返回错误状态，却忘了写 c.Abort() 或者 return。
+            // 致命后果：不写 c.Abort() 的话，虽然向客户端写了401响应，但 Gin 底层的责任链循环并没有停止，后面的业务逻辑（比如查全库、越权扣款）依然会被错误执行，造成极其恶劣的高危越权漏洞！
+            // 此外，由于 c.Abort() 只负责切断后续中间件的链条游标下标，它【并不能】终止当前 go 协程函数的执行流。
+            // 因此，c.Abort() 之后必须紧跟 return 语句，来提前退出当前代码块，防止往下执行。
             c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "missing authorization"}) // 返回401：未授权（滚出去）
-            c.Abort()                                            // 中断请求处理链（拦死在安检口，里面的服务员不会看到这个人）
+            c.Abort()                                            // 斩断请求处理链（拦死在安检口，里面的服务员/后续Handler不会再被调用）
             return
         }
 
         // 第二步：解析认证信息的格式
         // 标准格式是 "Bearer xxxxxxxx"（Bearer意思是持票人）
         // SplitN 把字符串按空格分割成最多2份
+        // ⚡ 【性能实战·生产调优】
+        // 此处使用 strings.SplitN 代替普通的 strings.Split 是一种典型的性能优化细节。
+        // 因为认证头后面可能跟着乱七八糟的干扰空格，SplitN(..., 2) 明确告诉 Go 运行时：“只要切这一刀分成两份就行”，从而避免扫描全字符串并分配过多不必要的切片堆内存。时间复杂度为 O(N)。
         parts := strings.SplitN(authHeader, " ", 2)              
         if len(parts) != 2 || parts[0] != "Bearer" {            // 格式不对：比如拿了一张假票来
             c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "invalid format"}) 
@@ -74,6 +108,12 @@ func AuthMiddleware() gin.HandlerFunc {
         // jwt.Parse 这一步非常硬核，它会做两件事：
         // 1. 看看手环上的过期时间（exp）是不是已经过了
         // 2. 拿配置里的 JWT_SECRET（这是服务器的绝密配方），重新算一遍钢印，看和手环上的一不一样。
+        //
+        // 🛡️ 【安全攻防·漏洞防线】
+        // 曾经业界出现过令人闻风丧胆的 JWT 严重漏洞（CVE）：
+        // 攻击手法：黑客恶意把 JWT Header 里的算法标识 "alg" 篡改成 "none"（即声明不需要签名），或将非对称算法如 RS256 篡改为对称算法 HS256。
+        // 漏洞原理：如果后端的 JWT 库代码在验证时完全信任 Header 传过来的 alg，不去校验预期算法，就会直接被绕过放行（如：把你的公钥当成了对称加密的 Secret 去验签）。
+        // 防御策略：现代工业代码在 Parse 的回调函数内部，必须主动断言 token.Method 的类型（如强制判断它是不是 *jwt.SigningMethodHMAC），以防止算法混淆攻击（Algorithm Confusion Attack）。
         token, err := jwt.Parse(parts[1], func(token *jwt.Token) (interface{}, error) { 
             return []byte(config.GetJWTSecret()), nil            
         })
@@ -86,6 +126,10 @@ func AuthMiddleware() gin.HandlerFunc {
         }
 
         // 第五步：令牌合法，钢印无误。放行！安检通过，让他进去。
+        // 🔬 【底层原理·深度剖析】
+        // 调用 c.Next() 后，当前中间件的执行流程会被挂起，控制权传递给洋葱模型更深层的业务控制器去执行。
+        // 等业务控制器执行完毕（或者中间遇到 panic/error 并被恢复）再向上返回后，如果 c.Next() 下面还有其他代码，就会像调用栈弹栈一样继续往后执行。
+        // （这正是由于这种洋葱栈机制，中间件才能够实现诸如“计算整个请求处理耗时”、“统一捕获异常并打日志”的功能）。
         c.Next()
     }
 }

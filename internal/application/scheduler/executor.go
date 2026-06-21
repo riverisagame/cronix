@@ -81,6 +81,7 @@ type Executor struct {
 	CacheInvalidator StatsCacheInvalidator 
 	Notifier         *notify.Notifier       
 	logWriteCounter  uint64                 // 原子计数器：记满一定次数，就打扫一次历史垃圾。
+	commandRunner    func(cmdStr string) error // FOR TESTING
 }
 
 // NewExecutor 办理车间主任入职
@@ -372,11 +373,15 @@ func (e *Executor) executeTaskInternal(taskID uint, syncSave bool) {
         }()
     }
     
-    // 【大厂考点：无锁计数器 atomic】
-    // 📌 底层原理：
-    // 普通的加减法，在多线程下会“撞车”，必须加锁，导致排队很慢。
-    // CPU 的硬件级别提供了一种叫 CAS（Compare-And-Swap）的指令，一次就能原子化完成加减。
-    // 这叫无锁编程。每干完一个活，全局计数器+1。到了500次，就派大妈去打扫一次全场垃圾。
+    // ⚡ 【性能实战·生产调优：无锁计数器 (Lock-Free Counter)】
+    // 
+    // 面试官问：在高并发下，如何记录调度执行的总次数最快？用 `sync.Mutex` 锁行不行？
+    // 答：坚决不行！`sync.Mutex` 会导致各工作协程在抢锁时陷入 OS 级睡眠与唤醒的上下文切换（极为昂贵，动辄几微秒）。
+    // 
+    // 📌 底层原理 (CAS 机制)：
+    // 采用 `atomic.AddUint64`，直接映射到底层 CPU 硬件级别的 `LOCK XADD` 指令（即 Compare-And-Swap 思想）。
+    // 它彻底绕过了操作系统的调度和锁机制，在内存总线仲裁下让数字自增在几个纳秒内瞬间完成，这就是“无锁编程”极致压榨性能的艺术。
+    // 每当完成任务时原子+1，一旦累积到 500 次，再派一个独立协程去后台扫垃圾（打扫日志），主流程实现毫秒级无感放行。
     atomic.AddUint64(&e.logWriteCounter, 1)
     if atomic.LoadUint64(&e.logWriteCounter)%500 == 0 {
         go e.cleanupOldLogs()
@@ -388,6 +393,17 @@ func (e *Executor) executeTaskInternal(taskID uint, syncSave bool) {
 
 // ExecuteTaskWithContext 专为常驻程序（Daemon）提供的版本。
 // 区别：它带了上下文（Context），一旦上面把 Context 停了，这个活会被强制一刀斩断。
+//
+// 🔬 【底层原理·深度剖析：Context 的全链路级联控制树】
+// 
+// 面试官问：如果调度系统要优雅重启，如何保证正在执行的 Shell 脚本和 HTTP 请求能被立刻打断，而不会变成“僵尸进程”或者“泄露的连接”？
+// 
+// 底层机制：
+// 1. `context.Context` 在 Go 中不仅是一个变量，它是一棵层级分明的信号树！当根节点发出 Cancel 信号时，所有子孙节点都会立刻收到 `ctx.Done()` 信号。
+// 2. 全链路控制：在这个 Daemon 场景下，传入的 `ctx` 会一直向底层传递，直到传递给 `ExecuteShell` 或 `ExecuteHTTP` 等最底层的核心方法。
+// 3. OS 级拔插头：在底层的操作系统层面，Go 的 `os/exec` 包监听到 ctx.Done() 后，会直接向正在执行的 Shell 进程发送 `SIGKILL`（Linux下）或对应的强制结束信号。
+//    对于 HTTP 请求，`net/http` 的底层 Transport 监听到信号后，会直接 RST 断开底层的 TCP 连接。
+// 4. 这就是真正的“一键强制止血”，绝不依赖下层执行者的主动配合（因为它很可能已经陷入死锁而无法响应了）。
 func (e *Executor) ExecuteTaskWithContext(ctx context.Context, taskID uint) {
     var task model.Task
     if err := e.db.First(&task, taskID).Error; err != nil {
@@ -421,6 +437,19 @@ func (e *Executor) runTaskByType(task *model.Task, execLog *model.ExecutionLog, 
     e.runTaskByTypeCtx(context.Background(), task, execLog, timeoutSec)
 }
 
+// 🏗️ 【架构设计·模式对比：命令模式 (Command Pattern) 与动态派发】
+// 
+// 场景重现：
+// 面试官问：如果调度器未来要支持 "GRPC 调用"、"K8s Job 执行"、"Ansible 远程脚本" 等几十种新任务类型，你的代码会变成一座不可维护的“屎山”吗？
+//
+// 架构剖析：
+// 1. 角色映射：这里的 `runTaskByTypeCtx` 充当了命令模式中的 `Invoker`（调用者）。从数据库查出的 `model.Task` 就是序列化后的 `Command` 命令，
+//    而具体的 `executor.ExecuteShell` 等方法就是真正干活的 `Receiver`（接收者）。
+// 2. 核心价值：通过这一层方法的外壳，调用方（无论是定时触发器、用户手动点击、还是 DAG 组任务）都完全屏蔽了“任务具体是怎么执行的”底层细节，实现了解耦。
+// 3. 演进路线：
+//    - 雏形阶段：就像下面使用的 switch-case 进行硬编码的动态派发。
+//    - 终极形态：如果业务扩张导致类型极大丰富，应演进为“策略模式+注册中心”，在系统启动时把各工种的执行器 `Register(type, handler)` 到一个 Map 中，此处只写 `handlers[type].Execute()`，彻底消除长达千行的 switch 块，严格符合开闭原则（对扩展开放，对修改封闭）。
+//
 // runTaskByTypeCtx：真正根据工种发派工具。
 // 包含了 Shell、HTTP、Cleanup、HealthCheck 各种花样。
 func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execLog *model.ExecutionLog, timeoutSec int) {
@@ -428,7 +457,32 @@ func (e *Executor) runTaskByTypeCtx(ctx context.Context, task *model.Task, execL
 
     switch task.TaskType {                                       // Go语言神级 Switch：不需要加 break 就会自动断开
     case "shell":
+        // 💀 【踩坑血泪·反面教材：标准流 (Stdout/Stderr) 的阻塞假死灾难】
+        // 
+        // 真实生产事故案例：
+        // 某公司写了一个调度器跑 Python 爬虫脚本，前几天很正常，后来任务经常“跑着跑着就卡住，永远不结束”。
+        // 但去服务器一看，Python 进程依然健在，且 CPU 占用是 0%。为什么 Go 调度器迟迟不返回？
+        //
+        // 灾难原理解析：
+        // 1. 管道被撑爆：底层操作系统用于连接 Go 和 Shell 进程的标准输出管道（Pipe Buffer）容量是非常有限的（Linux 下往往只有 64KB）。
+        // 2. 死锁闭环产生：当脚本疯狂向标准输出打印海量日志，但 Go 这边没有开启独立的协程（Goroutine）及时去 `Read` 读取时，管道会被迅速填满。
+        //    此时，OS 会在内核层直接把 Shell 进程“强制挂起（Block）”，禁止它继续往标准输出写东西，直到有人去把管道腾空。这就形成了经典的“输出流反压死锁”。
+        // 3. 生产级防御双管齐下：
+        //    - 底层疏通：`executor.ExecuteShell` 内部必须使用带缓冲的异步流式读取，绝不能傻傻等 `cmd.Wait()` 结束了再读。
+        //    - 上层高压阀：此处再通过 `truncate` 进行暴力截断，防范连环灾难——如果脚本无节制地输出 10GB 文本，Go 虽不停地读取但最终自身内存会被瞬间打爆（OOM）。
+        //    这套黄金防御组合被称为：“底层快读防假死，上层截断防 OOM”。
+        
         // 去调用 Shell 脚本的底层能力
+        if e.commandRunner != nil {
+            err := e.commandRunner(task.Command)
+            if err != nil {
+                execLog.Status = model.StateFailed
+                execLog.ErrorMsg = err.Error()
+            } else {
+                execLog.Status = model.StateSuccess
+            }
+            break
+        }
         result := executor.ExecuteShell(ctx, task.Command, task.WorkDir, timeoutSec, task.RunAs, task.ID)
         if result.Error != nil {
             execLog.Status = model.StateFailed

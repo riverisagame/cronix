@@ -31,14 +31,41 @@
 //    宁可大屏上的数据不准，也绝不能让真实用户的任务被卡住！
 //
 // @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05
+//
+// 🏗️ 【架构设计·模式对比：Prometheus Pull 模型 vs Push 模型】
+// 
+// 1. Pull 模型（拉取模式 - Prometheus 默认与推荐标准）：
+//    - 原理：监控服务主动向被监控应用暴露的 `/metrics` HTTP 接口拉取（Scrape）数据。
+//    - 优点：解耦（应用不需要知道监控系统在哪）、抗压能力强（被监控端不会因为发送监控数据而因为网络 I/O 阻塞）、
+//            易于调试（开发者可以直接用浏览器访问 `/metrics` 看当前数据）。
+//    - 本文件思想归属：本代码实现了内嵌的 In-Memory Metrics Registry，它的 `GetSnapshot()` 接口
+//            本质上就是在为 Pull 模型提供数据源。前端或者上游采集器按需（比如每秒 1 次）来"拉取"数据。
+// 
+// 2. Push 模型（推送模式 - StatsD / Prometheus Pushgateway）：
+//    - 原理：应用主动通过 UDP/TCP 将指标推送给监控网关。
+//    - 缺点：如果有 1 万个实例同时向同一个监控网关 Push，极易引发网关单点雪崩（DDOS 自己）。同时 Push
+//            会在主业务线程中引入额外的网络 I/O 开销，甚至拖累主流程。
+// 
+// 📌 【大厂面试·核心考点：四大核心监控指标类型（Metric Types）】
+// 面试官问：Prometheus 有哪四种数据类型？你这里的成功/失败次数，和 P99 分别属于哪种？
+// 
+// 标准答案：
+// 1. Counter（计数器）：只增不减（除非重启）。适用场景：请求总数、异常总数（如本文件中的 `Success` / `Failed`）。
+// 2. Gauge（仪表盘）：可增可减。适用场景：当前活跃连接数、当前内存占用大小、CPU 使用率。
+// 3. Histogram（直方图）：在客户端配置好固定跨度的桶（Buckets，如 10ms, 50ms, 100ms），客户端只需记录请求落在了哪个桶里，
+//    服务端在拉取后通过 `histogram_quantile` 动态计算分位数。优点是客户端极度轻量，缺点是分位数是线性估算值。
+// 4. Summary（摘要）：客户端不仅记录总数和总耗时，还直接在客户端计算好精确的 P50, P90, P99。
+//    - 本文架构归属：本文件中的 `calculatePercentile` 和 `MetricBucket` 架构，本质上就是手写了一个简易版
+//      的 **Summary** 收集器。它在进程内直接完成了精确分位数的采样与计算。
 // ============================================================
 package scheduler
 
 import (
-	"fmt"
-	"sort"
-	"sync"
-	"time"
+	// 🔬 【底层原理·深度剖析：核心包的底层作用】
+	"fmt"  // 格式化输出，用于组装时间标签如 "15:00"（内部调用了反射和 buffer 操作，高频路径慎用，此处仅用于定时快照）
+	"sort" // 切片排序，此处用于计算分位数。底层的 pdqsort（Pattern-Defeating Quicksort）对几乎有序或重复数据有极大性能优化
+	"sync" // 并发原语，提供互斥锁（Mutex）与读写锁（RWMutex），用于解决多协程环境下的内存数据争用与同步
+	"time" // 时间轮与时钟控制，用于记录任务发生的时间戳以及定时滑动清理数据的 Ticker
 )
 
 // MetricEvent 代表一次任务执行的原始成绩单
@@ -73,6 +100,21 @@ type MetricBucket struct {
 	Durations []int64   // 这 1 分钟内所有任务的耗时记录（用来算 P99）
 }
 
+// 💀 【踩坑血泪·反面教材：锁争用导致的指标搜集性能瓶颈 (Lock Contention)】
+//
+// 真实生产事故案例：
+// 某大厂系统在双 11 压测时，业务 CPU 使用率不高，但 QPS 却怎么也上不去。经过 pprof 抓取 profile 发现，
+// 80% 的 CPU 时间全部耗费在 `sync.Mutex` 的 `Lock()` 竞争上。
+// 原因就是所有的业务线程在执行完任务后，都去调用 `Record()`，而 `Record()` 里面有一把全局的大锁保护一个 Map。
+// 1000 个协程同时抢一把锁，导致所有业务协程阻塞在指标上报环节，形成灾难性的“监控拖垮主营业务”！
+//
+// 修复与优化手段：
+// 1. 无锁队列（Lock-Free）：利用 Go 的 Channel（底层也是带锁的环形队列，但优化极好）或 `sync/atomic` 做原子递增。
+// 2. 分段锁（Striped Locks）/ Thread-Local：给每个 CPU 核心分配一个统计桶，定时再汇总（参考 Go 源码里的 `sync.Pool`）。
+// 3. 异步批处理：像本文件的做法，`RecordExecution` 不直接加写锁改 Map，而是将事件丢入一个有缓冲的 Channel `events`。
+//    真正的 Map 更新被移到了 `processEvents()` 这个单一的后台协程中。这把全局的 Map 多写操作变成了“单协程顺序写”，
+//    彻底消灭了写入端的锁争用！`mu` 读写锁只在应对“前端查询（极低频，拿读锁）”和“后台协程写（拿写锁）”之间做隔离，极大降低了冲突面。
+//
 // MetricsRegistry 统计员的办公桌
 // @Ref: docs/sps/plans/20260605_metrics_plan.md | @Date: 2026-06-05
 type MetricsRegistry struct {
@@ -102,7 +144,16 @@ func NewMetricsRegistry() *MetricsRegistry {
 }
 
 // RecordExecution 车间主任扔成绩单的动作。
+// ⚡ 【性能实战·生产调优：旁路非阻塞写入模型】
+// 结合上述的锁争用（Lock Contention）解决方案，这里就是性能调优的直接体现。
+// 1. 无锁化上报：业务线程执行完毕后调用此方法，全程只拿了一下极其轻量的读锁（判断 stopped），
+//    绝不直接操作 Map，这几乎不会产生严重的排队现象。
 func (m *MetricsRegistry) RecordExecution(durationMs int64, success bool) {
+	// 🛡️ 【安全攻防·漏洞防线：并发状态机校验与竞态防护】
+	// 这里先用读锁检查 stopped 状态。为什么不直接不加锁读？
+	// 在 Go 语言的内存模型（Memory Model）中，如果不加任何同步原语（如 atomic 或 Mutex）直接读一个
+	// 可能正在被其他协程修改的变量，会导致“Data Race（数据竞争）”。轻则读到旧值，重则导致程序崩溃。
+	// 使用 RLock 既保证了多协程安全，又因为全是读锁，相互之间不互斥，将性能损耗降到了最低。
 	m.mu.RLock()
 	stopped := m.stopped
 	m.mu.RUnlock()
@@ -150,6 +201,14 @@ func (m *MetricsRegistry) Stop() {
 // @Ref: architect_review_20260609.md P1-5 | @Date: 2026-06-09
 const maxDurationSamples = 1000
 
+// 🧪 【测试工程·质量保障：异步消费的测试策略】
+// 针对这种从 channel 异步消费数据的协程（goroutine），在编写单元测试时面临极大挑战
+// （可能出现数据刚放入 channel 还没处理完，断言却已经执行，导致 Flaky Test）。
+// 解决策略（Mock 思想扩展）：
+// 1. 在测试中注入一个同步控制（如 WaitGroup 或专用的 done channel）。
+// 2. 或者在断言前使用 `Eventually`（如 gomega 库）进行带超时的轮询判断。
+// 3. 严禁使用 `time.Sleep()` 盲等，这会严重拖慢整个 CI 链路的速度并降低测试的稳定性。
+//
 // processEvents 左手：分拣成绩单，扔进对应的桶里
 func (m *MetricsRegistry) processEvents() {
 	for {
@@ -163,6 +222,10 @@ func (m *MetricsRegistry) processEvents() {
 			hourKey := ev.Time.Format("2006-01-02 15")   // 去掉分，变成 "15" 桶
 
 			// ----- 分钟桶处理 -----
+			// 🏗️ 【架构设计·模式对比：Counter 类型实时聚合机制】
+			// 这里的 Success++ 和 Failed++ 就是标准的 Prometheus Counter 类型的纯手工实现。
+			// 因为上报源是极高频的（可能每秒上万次调用），如果每次都通过网络推给前端或存入数据库，网络和磁盘 I/O 都会崩溃。
+			// 这里在服务端进行聚合（Rollup），将散乱的高频事件压缩为高密度的 1 分钟时间桶，完美契合时序数据库（TSDB）的理念。
 			if _, ok := m.minuteBuckets[minKey]; !ok {
 				m.minuteBuckets[minKey] = &MetricBucket{Timestamp: ev.Time} // 没这个桶就建一个
 			}
@@ -223,6 +286,14 @@ func (m *MetricsRegistry) cleanupLoop() {
 	}
 }
 
+// 🔬 【底层原理·深度剖析：分位数算法的局限性与分布式突破】
+// 在单机版监控中，这样使用内存排序计算 P99 是完全可以接受的（这里通过 maxDurationSamples 限制最大只有 1000 个元素，排序时间在微秒级）。
+// 但是在分布式系统中，假设有 100 台机器，你想算全局的 P99。
+// - 💀 错误做法：直接把 100 台机器算出来的各自的 P99 拿来求平均数。这是绝对的数学谬误！（各个子集的 P99 的平均数 绝不等于 全局总集的 P99）。
+// - ✅ 正确做法：
+//   1. T-Digest 算法：Elasticsearch 中使用的估计算法，能在极低内存消耗下，在分布式节点合并时计算出高精度的全局分位数。
+//   2. Prometheus Histogram：让每台机器只记录各个耗时桶的累加次数（Bucket Counter），监控中心拉取所有节点的计数相加后，再通过插值法估算全局 P99。
+//
 // calculatePercentile 计算 Pxx 分位数（比如 P99就是 percentile=0.99）
 // 算法：先把所有耗时从小到大排序，然后用 总个数 * 0.99，取出那个位置的值。
 func calculatePercentile(durations []int64, percentile float64) int64 {

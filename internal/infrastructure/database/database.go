@@ -9,7 +9,7 @@
 //   5. 程序结束时安全关闭数据库，防止数据损坏
 //
 // ============================================================
-// 💡 【大厂面试·底层原理扩展（初二小白版）】
+// 📌 【大厂面试·核心考点】
 // 
 // 1. 面试官问：为什么要用 `PRAGMA journal_mode=WAL`（预写式日志）？
 // 答：
@@ -45,12 +45,16 @@ import (
     "fmt"
     "os"
     "path/filepath"
+    "time"
 
     "cronix/internal/domain/model"
 
     // glebarez/sqlite 是一个纯 Go 语言写的 SQLite 驱动
-    // "纯 Go" 的意思是它不需要 C 语言编译器（不需要 CGO）
-    // 这样在任何操作系统上都能直接编译，不挑环境
+    // 🔬 【底层原理·深度剖析】
+    // 为什么不用官方的 mattn/go-sqlite3？
+    // "纯 Go" 的意思是它不需要 C 语言编译器（不需要 CGO）。
+    // CGO 会带来极大的跨平台编译痛苦（Windows下需要安装 gcc 等工具链，Docker 镜像也会变臃肿）。
+    // 使用纯 Go 驱动，在任何操作系统上都能 `go build` 直接跑出静态二进制文件，部署极度清爽。
     "github.com/glebarez/sqlite"
     "github.com/rs/zerolog/log"
 
@@ -73,6 +77,12 @@ func Init(dbPath string) error {
     }
 
     // --- 第2步：打开数据库连接 ---
+    // 🛡️ 【安全攻防·漏洞防线】 & ⚡ 【性能实战·生产调优】
+    // 日志级别设置（Logger: logger.Default.LogMode(logger.Warn)）：
+    // 生产环境绝对禁止使用 Info 级别打印所有 SQL！
+    // 1. 性能灾难：高并发下打印每条 SQL 会极大消耗 CPU 和磁盘 I/O（日志阻塞）。
+    // 2. 安全漏洞：Info 级别会打印完整的 SQL 参数，如果参数中包含用户密码、身份 token 等，将导致严重的内部信息泄露，数据脱敏彻底失效。
+    // 正确做法：生产环境保持 Warn 级别（只打印慢查询和错误），或者自定义 Logger 对核心敏感字段进行脱敏(Masking)。
     db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
         Logger: logger.Default.LogMode(logger.Warn),
     })
@@ -81,6 +91,10 @@ func Init(dbPath string) error {
     }
 
     // --- 第3步：检查数据库完整性 ---
+    // 💀 【踩坑血泪·反面教材】
+    // 事故现场：某项目 SQLite 作为单文件数据库，在突然断电、磁盘满、或被外部杀毒软件强行拦截扫描时，发生了文件损坏。
+    // 如果不加完整性检查，程序启动后读取错乱的底层页表数据，会产生千奇百怪的幻觉级 bug，且排查极难。
+    // 防御方案：必须在程序启动的最开始跑一把 "PRAGMA integrity_check"，发现文件损坏立刻打印致命报警，通知运维恢复冷备数据！
     var integrityResult string
     if err := db.Raw("PRAGMA integrity_check").Scan(&integrityResult).Error; err != nil {
         log.Warn().Err(err).Msg("数据库完整性检查执行失败")
@@ -89,16 +103,45 @@ func Init(dbPath string) error {
     }
 
     // --- 第4步：配置数据库连接池 ---
+    // 📌 【大厂面试·核心考点】：Go 语言数据库连接池配置四大天王
+    // 面试官问：如何正确配置 Go 的 database/sql 连接池以防雪崩？
     sqlDB, _ := db.DB()
 
-    // 强行单连接防锁机制
+    // 1. MaxOpenConns (最大打开连接数)
+    // 原理：控制同时访问数据库的并发连接绝对上限。
+    // 这里设为 1 是因为 SQLite 写锁限制（强行单连接防锁机制），强制并发写请求排队。
+    // 对于 MySQL/PostgreSQL，通常设置为 100-500 左右，太大会压垮数据库服务器（连接数过多产生上下文切换风暴），太小吞吐量上不去。
     sqlDB.SetMaxOpenConns(1)
 
+    // 2. MaxIdleConns (最大空闲连接数)
+    // 原理：保留在连接池中不被关闭的连接数，相当于池子里的“常备军”。
+    // 💀 踩坑：如果 MaxIdleConns 远小于 MaxOpenConns，高并发洪峰到来时会发生连接的剧烈创建和销毁（Connection Churn），导致性能雪崩。
+    // 最佳实践：推荐 MaxIdleConns 设置为与 MaxOpenConns 相同或略小。这里因为最大是 1，所以空闲也是 1。
+    sqlDB.SetMaxIdleConns(1)
+
+    // 3. ConnMaxLifetime (连接最大存活时间)
+    // 原理：一个连接在被创建出来后，最多能活多久，到期强制关闭并重建。
+    // 💀 踩坑：很多云服务商（如阿里云、AWS）的负载均衡 NAT/防火墙会主动静默掐断空闲超过 15 分钟的 TCP 连接。
+    // 如果 Go 不配这个参数，会从池子里拿到一个实际在网络层已经断开的坏连接，引发 "invalid connection" 大规模报错。
+    // 最佳实践：设置在 10~30 分钟左右。必须小于数据库服务器自身的 wait_timeout 或云防火墙超时。
+    sqlDB.SetConnMaxLifetime(30 * time.Minute)
+
+    // 4. ConnMaxIdleTime (连接最大空闲时间)
+    // 原理：一个连接如果不干活，最多在池子里躺多久后被解雇（释放空闲内存和端口资源）。
+    // 通常设置为比 ConnMaxLifetime 稍短一点。
+    sqlDB.SetConnMaxIdleTime(10 * time.Minute)
+
     // WAL mode: better concurrent read/write performance
+    // ⚡ 【性能实战·生产调优】
+    // 将日志模式设为 Write-Ahead Logging。如文件头部的详细讲解，让 SQLite 告别独占式死锁，读写并发能力大幅跃升。
     if err := db.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
         log.Warn().Err(err).Msg("failed to set WAL mode")
     }
+    
     // NORMAL sync is safe in WAL mode, much faster than FULL
+    // ⚡ 【性能实战·生产调优】
+    // synchronous=FULL 意味着每提交一次事务都要强制操作系统的刷盘指令（fsync），I/O 负担极其沉重。
+    // WAL 模式下，设为 NORMAL 既能保证在操作系统不崩溃（如仅仅是当前 Go 程序崩溃）时的数据安全，又能享受飞一般的写入速度。
     if err := db.Exec("PRAGMA synchronous=NORMAL").Error; err != nil {
         log.Warn().Err(err).Msg("failed to set synchronous=NORMAL")
     }
@@ -116,6 +159,10 @@ func Init(dbPath string) error {
     }
 
     // Indexes for log cleanup and query performance
+    // 🏗️ 【架构设计·模式对比】
+    // GORM 完全支持在 Struct 结构体标签里写 `gorm:"index"` 来建索引，那为什么这里要用原生的 SQL 字符串来创建复合索引？
+    // 理由：原生 SQL 提供了更清晰且确定的语义（特别是 "IF NOT EXISTS" 和跨列的复合索引顺序控制），
+    // 脱离了 ORM 的黑盒魔法转换，让 DBA 或者架构师在代码里一眼就能看懂最底层的索引结构，便于后期根据 Explain 进行精准调优。
     for _, idx := range []string{
         "CREATE INDEX IF NOT EXISTS idx_el_created_at ON execution_logs(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_el_task_start ON execution_logs(task_id, start_time)",
@@ -135,6 +182,11 @@ func Init(dbPath string) error {
 }
 
 // Close 负责安全地关闭数据库连接
+// 🔬 【底层原理·深度剖析】
+// 为什么程序退出时必须 Close()？
+// 虽然操作系统在进程挂掉时会回收内存和文件句柄，但正常退出时显式调用 Close 可以：
+// 1. 等待未完成的数据库事务处理完毕。
+// 2. 对 SQLite 来说，能触发 WAL 日志的安全 Checkpoint 操作，合并 wal 文件到主库中，防止文件无限膨胀。
 func Close() error {
     if DB != nil {
         sqlDB, err := DB.DB()

@@ -2,7 +2,7 @@
 // internal/cache/cache.go - 内存缓存（带过期时间）
 //
 // 💡 【大厂面试·底层原理扩展（初二小白版）】
-// 
+//
 // 1. 面试官问：什么是缓存（Cache）？为什么要有 TTL（保质期）？
 // 答：
 // 数据库就像是“新华字典”，里面什么词都有，但查起来很慢，要一页一页翻（磁盘 I/O）。
@@ -24,79 +24,137 @@
 // 这种方式最省 CPU（不用专门开个后台线程去扫），但缺点是如果有过期数据永远没人查，它就永远占着内存。
 // 专业的 Redis 会把【惰性删除】和【定期随机抽查删除】结合起来用。
 // ============================================================
+//
+// 📌 【大厂面试·核心考点】
+// 面试官问：你设计的本地缓存如果无限期往里面加数据，会发生什么？
+// 答：会导致 OOM (Out Of Memory)。当前实现只有“惰性删除”，也就是仅在 Get 时判断过期，过期的才视为不存在。但由于没有主动清理机制和容量上限，底层 map 会无限膨胀。正确的做法是引入容量限制（如 LRU/LFU 淘汰策略），或者后台起一个 goroutine 定期清理过期的 keys。
+//
+// 🏗️ 【架构设计·模式对比】
+// 面试官问：本地缓存为什么用 `map + sync.RWMutex` 而不用原生的 `sync.Map`？
+// 答：
+// 1. 适用场景：`sync.Map` 是专门为“读多写少”或“键集不相交”的场景优化的（内部有两个 map，一个 read 只读，一个 dirty 读写）。对于缓存这种“频繁写入和淘汰过期键”的场景，`sync.Map` 会导致 dirty map 和 read map 频繁转换，性能反而不如 `map + RWMutex`。
+// 2. 泛型支持：`sync.Map` 目前原生不支持泛型（存取都要 interface{} 断言，有开销），而 `map + RWMutex` 可以配合 Go 1.18 完美实现强类型安全。
+//
+// 🔬 【底层原理·深度剖析】
+// 面试官问：讲讲三大缓存问题的本地化防御机制？
+// 答：
+//  1. 缓存击穿（热点 Key 失效）：一个热点 Key 突然过期，瞬间大量并发请求打到数据库。
+//     -> 本地防御：在 Get() 未命中后，使用 golang.org/x/sync/singleflight 包装加载数据库的逻辑，确保同一时刻只有一个 goroutine 去查询数据库，其他 goroutine 等待结果。
+//  2. 缓存穿透（查不存在的伪造数据）：黑客疯狂查询数据库根本没有的记录。
+//     -> 本地防御：将不存在的 Key 也缓存起来，Value 置为“空标记”（比如空结构体或特定枚举），并设置较短的 TTL，结合布隆过滤器（Bloom Filter）在更上层拦截。
+//  3. 缓存雪崩（大批 Key 同时失效）：很多 Key 刚好在同一秒过期。
+//     -> 本地防御：在给数据设置 TTL 的时候，不要用固定的 `c.ttl`，而是在 `c.ttl` 基础上加上一段随机时间（例如随机的 0~60 秒），让失效时间打散（Jitter）。
+//
+// ============================================================
 package cache
 
 import (
-    "sync"   // 并发控制：读写锁
-    "time"   // 时间处理：判断是否过期
+	"sync" // 并发控制：读写锁
+	"time" // 时间处理：判断是否过期
 )
 
 // Item 表示一条缓存数据，包含值和过期时间
 // [T any] 是Go的泛型语法，T可以是任何类型（字符串、数字、结构体等）
 type Item[T any] struct {
-    Value     T         // 缓存的实际数据（类型在创建缓存时确定）
-    ExpiresAt time.Time // 过期时间点（超过这个时间就认为数据作废了）
+	Value     T         // 缓存的实际数据（类型在创建缓存时确定）
+	ExpiresAt time.Time // 过期时间点（超过这个时间就认为数据作废了）
 }
 
 // Cache 是一个支持泛型的带过期时间的内存缓存
 // T 表示缓存中存储的数据类型
+//
+// ⚡ 【性能实战·生产调优】
+// 这里的 map 在 Go 中底层是哈希表。随着数据不断写入，map 会触发扩容（翻倍扩容）。
+// 💀 【踩坑血泪·反面教材】
+// 如果你频繁 Set 然后 Delete，Go 的 map 不会缩容！被删除的 key 的内存不会交还给操作系统，只会标记为空闲。
+// 这意味着如果是海量写入又删除，这里的 map 会变成内存黑洞。
+// 解决办法：像 Clear() 那样定期用一个全新的 map 替换掉老 map（也就是垃圾回收掉老的哈希表），或者采用分片锁机制降低颗粒度。
 type Cache[T any] struct {
-    mu    sync.RWMutex         // 读写锁（RWMutex）：允许多个读者同时读，但写者独占
-    items map[string]Item[T]   // 存储缓存数据的映射表，key是字符串，value是Item
-    ttl   time.Duration        // TTL（保质期）：每条缓存数据从存入起能活多久
+	mu    sync.RWMutex       // 读写锁（RWMutex）：允许多个读者同时读，但写者独占
+	items map[string]Item[T] // 存储缓存数据的映射表，key是字符串，value是Item
+	ttl   time.Duration      // TTL（保质期）：每条缓存数据从存入起能活多久
 }
 
 // New 创建一个新的缓存实例
 // 参数 ttl：缓存数据的保质期（例如 5*time.Minute 表示5分钟）
 // 返回值：Cache指针
+//
+// 🧪 【测试工程·质量保障】
+// 测试这种带有时间的组件时，千万不要用 time.Sleep 去等！
+// 正确做法：应该将 time.Now() 抽象成一个可以被 mock 的时钟接口（Clock injection），在单元测试里手动拨快时钟，实现毫秒级验证 TTL，保证测试纯粹物理零污染与极速执行。
 func New[T any](ttl time.Duration) *Cache[T] {
-    return &Cache[T]{
-        items: make(map[string]Item[T]), // 初始化空的映射表
-        ttl:   ttl,                       // 设置保质期
-    }
+	return &Cache[T]{
+		items: make(map[string]Item[T]), // 初始化空的映射表
+		ttl:   ttl,                      // 设置保质期
+	}
 }
 
 // Get 从缓存中读取一条数据
 // 参数 key：数据的键（唯一标识）
 // 返回值：数据本身、是否找到（true=找到了，false=没找到或已过期）
+//
+// 🔬 【底层原理·深度剖析】
+// 为什么不用 Defer 性能会更好？（注：目前代码为了可读性使用了 defer）
+// defer c.mu.RUnlock() 每次调用会有少量开销（约 10-20 纳秒）。
+// 在极其追求极致性能的基础库中（千万级 QPS），大厂源码会手动写 `c.mu.RUnlock()` 在每个 return 前面，去掉 defer。
+//
+// 🛡️ 【安全攻防·漏洞防线】
+// 并发读写问题：RWMutex 的 RLock 虽然允许多个 goroutine 同时读，但是在 Go 的读写锁实现中，如果有 goroutine 正在等待 Lock（写锁），后续新来的 RLock 会被阻塞，防止“写饥饿”。因此如果写操作耗时太长，会瞬间拖垮所有读请求。所以这里的 items 读写必须极简极快！
 func (c *Cache[T]) Get(key string) (T, bool) {
-    c.mu.RLock()                                                  // 加读锁（允许多人同时读）
-    defer c.mu.RUnlock()                                          // 函数结束时释放读锁
-    item, ok := c.items[key]                                      // 查找key对应的缓存项
-    if !ok {                                                      // 没找到
-        var zero T                                                // 创建T类型的零值（数字的零值是0，字符串是""）
-        return zero, false                                        // 返回零值和false
-    }
-    if time.Now().After(item.ExpiresAt) {                         // 找到了但已过期（After = "在...之后"）
-        var zero T
-        return zero, false                                        // 过期等同于不存在
-    }
-    return item.Value, true                                       // 返回有效数据
+	c.mu.RLock()             // 加读锁（允许多人同时读）
+	defer c.mu.RUnlock()     // 函数结束时释放读锁
+	item, ok := c.items[key] // 查找key对应的缓存项
+	if !ok {                 // 没找到
+		var zero T         // 创建T类型的零值（数字的零值是0，字符串是""）
+		return zero, false // 返回零值和false
+	}
+	if time.Now().After(item.ExpiresAt) { // 找到了但已过期（After = "在...之后"）
+		var zero T
+		return zero, false // 过期等同于不存在
+	}
+	return item.Value, true // 返回有效数据
 }
 
 // Set 向缓存中存入一条数据
 // 参数 key：数据的键
 // 参数 value：要存储的值
+//
+// 💀 【踩坑血泪·反面教材】
+// 缓存雪崩警告：如果你这样写缓存雪崩防御：每次都是固定的 ttl。如果有 10 万个商品同时在凌晨 12 点上架并缓存，
+// 5 分钟后它们会同时过期，导致 5 分钟后的那一瞬间，数据库被 10 万个并发请求打挂。
+// 解决办法：在业务层调用 Set 时，底层应该给过期时间加个随机抖动值，如 TTL + Rand(0~60秒)。
+//
+// ⚡ 【性能实战·生产调优】
+// 锁争用瓶颈：当并发量达到 10万+ QPS 时，这把全局互斥锁（mu sync.RWMutex）会成为绝对的瓶颈。
+// 优化手段：分片缓存（Sharded Cache）。将一个大 map 根据 Key 的 hash 值（如 CRC32）打散到 256 个小 map 中，每个小 map 配一把锁，这样锁冲突概率降为原来的 1/256。知名开源库 `bigcache` 和 `fastcache` 都是基于此设计。
 func (c *Cache[T]) Set(key string, value T) {
-    c.mu.Lock()                                                   // 加写锁（写操作需要独占）
-    defer c.mu.Unlock()
-    c.items[key] = Item[T]{                                       // 创建缓存项
-        Value:     value,                                         // 存储的值
-        ExpiresAt: time.Now().Add(c.ttl),                         // 过期时间 = 现在 + 保质期
-    }
+	c.mu.Lock() // 加写锁（写操作需要独占）
+	defer c.mu.Unlock()
+	c.items[key] = Item[T]{ // 创建缓存项
+		Value:     value,                 // 存储的值
+		ExpiresAt: time.Now().Add(c.ttl), // 过期时间 = 现在 + 保质期
+	}
 }
 
 // Delete 从缓存中删除一条数据
 // 参数 key：要删除的键
+//
+// 🏗️ 【架构设计·模式对比】
+// 如果我们需要将“惰性删除”升级为主动的 LRU（Least Recently Used，最近最少使用）机制，单纯用 map 就不够了。
+// LRU 还需要一个双向链表（Doubly Linked List）来维护数据的访问顺序：
+// 1. 每次 Get 命中的节点，移动到链表头部；
+// 2. 每次 Set 新数据，放入链表头部；
+// 3. 当容量满时，淘汰链表尾部的节点。
+// 若改为 LFU（最不经常使用），则需要维护访问频率，通常用最小堆（Min Heap）实现。
 func (c *Cache[T]) Delete(key string) {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    delete(c.items, key)                                          // Go内建的delete函数，从map中删除键
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.items, key) // Go内建的delete函数，从map中删除键
 }
 
 // Clear 清空缓存中的所有数据
 func (c *Cache[T]) Clear() {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    c.items = make(map[string]Item[T])                            // 创建新的空map，旧数据会被垃圾回收
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.items = make(map[string]Item[T]) // 创建新的空map，旧数据会被垃圾回收
 }

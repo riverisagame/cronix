@@ -2,19 +2,34 @@
 // internal/scheduler/daemon_monitor.go - 常驻进程守护控制器
 //
 // 【纳米级源码说明书 - 架构篇】
-// 类似于 Supervisor（Linux下的进程管家），它负责管理 RunMode == "daemon"（常驻模式）的任务。
+// 类似于 Supervisor 或 Systemd（Linux下的进程管家），它负责管理 RunMode == "daemon"（常驻模式）的任务。
+// 
+// 💡 给小白的背景：什么是“常驻任务”？
+// 就像你手机里的微信，必须一直挂着（常驻后台），不能跑一遍就死掉。如果微信闪退了（异常退出），系统得赶紧把它重新拉起来。
+// 本文件里的 DaemonMonitor 就是干这个活的，它是整个调度系统的“心脏起搏器”。
 //
-// 知识点补充（给小白的背景）：
-// 什么是“常驻任务”？
-// 就像你手机里的微信后台，它必须一直挂着（常驻），不能跑一遍就死掉。如果微信闪退了（异常退出），系统得赶紧把它重新拉起来。
-// 本文件里的 DaemonMonitor 就是干这个活的。
+// 🏗️ 【架构设计·模式对比】Daemon 存活检测机制：心跳探测 vs 进程PID检测
+// 真正的工业级 Daemon 管理有两个流派：
+// 1. PID 检测流（本项目及 Supervisor 的做法）：父进程 fork 出子进程后，通过操作系统的 wait/waitpid 系统调用阻塞等待。只要子进程的 PID 消失，内核就会给父进程发 SIGCHLD 信号，父进程瞬间感知任务挂了。
+//    - 优点：零侵入，对业务代码无任何要求。
+//    - 缺点：无法检测“假死”（进程还在，但死锁了，CPU 0% 且不处理请求）。
+// 2. 心跳探测流（K8s Liveness Probe 的做法）：守护进程不仅看 PID，还要求子进程每隔 N 秒往特定的 Socket/Port 发送 Ping 信号（或暴露 /health 接口）。
+//    - 优点：能精准干掉“假死”的僵尸服务。
+//    - 缺点：强侵入，必须要求业务配合写探针代码。
 //
-// 它有几个核心功能：
-//   1. 系统刚启动时，自动扫描数据库，把所有标了“常驻”的任务都拉起来运行。
-//   2. 如果任务崩溃了，它会自动重启（Keep-Alive）。它还能“退避延迟”（失败了等1秒、下次等2秒、再下次4秒...防止疯狂重启把系统搞死）。
-//   3. 连续失败太多次后“熔断”（FATAL），不再盲目重启。
-//   4. 支持人为点“启动”或“停止”。
-//   5. 提供给前端接口查状态。
+// 💀 【踩坑血泪·反面教材】孤儿进程与僵尸进程的深坑
+// 面试官常问：“如果用 kill -9 强杀了这个 DaemonMonitor（父进程），它拉起的那些子进程会怎样？”
+// 标准答案：
+// 1. 孤儿进程（Orphan）：父进程死后，子进程还在跑。它们会被操作系统的 init 进程（PID=1）收养。这在部署更新时极其危险，会导致老版本的进程还在偷偷改数据库！
+//    - 规避方案：在拉起子进程时，必须设置进程组ID（Setpgid），并在父进程退出前捕获信号，通过 `kill -进程组ID` 级联屠杀。
+// 2. 僵尸进程（Zombie）：子进程死了，但父进程没调 `waitpid()` 去收尸，子进程的 PCB（进程控制块）就会一直卡在内核态，占着 PID 号。当 PID 耗尽时，整个 Linux 连 `ls` 命令都敲不出来（报错 fork: Cannot allocate memory）。本项目通过 Go 底层 `os/exec` 的 `Wait()` 机制，完美隐式地处理了所有的 wait4 系统调用。
+//
+// 核心功能清单：
+// 1. 启动扫表：系统启动时，自动扫描所有标了“常驻”的任务并拉起。
+// 2. 崩溃重启：任务退出后自动拉起，包含退避熔断保护。
+// 3. 熔断降级：连续失败超限后进入 FATAL，不再盲目重启。
+// 4. 支持人为点“启动”或“停止”。
+// 5. 提供给前端接口查状态。
 //
 // ============================================================
 package scheduler // package 就像是给这块代码分个类，放进名为 scheduler (调度器) 的抽屉里。
@@ -174,21 +189,21 @@ func (m *DaemonMonitor) startDaemonInternal(parentCtx context.Context, taskID ui
 	}
 	task := *taskPtr // 星号(*) 意思是把指针指向的内容“解引用”抠出来。
 
-	// 💡 【大厂面试·底层原理扩展：Context 取消树与 Goroutine 泄露】
+	// 📌 【大厂面试·核心考点】Context 取消树与 Goroutine/进程 级联收割
 	// 
-	// 场景重现：
-	// 如果你起了一个协程去爬取网页，但这个网页卡死了，而且你没设置超时。随着时间推移，后台会堆积几万个永远也退不出的僵尸协程，
-	// 这就是臭名昭著的“Goroutine 泄露”。最终系统会因为内存耗尽（OOM）而崩溃。
+	// 场景重现（初二小白视角）：
+	// 想象你是个包工头（父协程），你招了一批工人（子协程），工人又带了狗（底层操作系统进程）。
+	// 如果你想让某个工人停手，你怎么通知他和他的狗？如果不通知，工人一直赖在工地上，这就是臭名昭著的“Goroutine 泄露”。
 	//
-	// 底层剖析与大厂对冲方案：
-	// 1. 取消树（Cancellation Tree）：`context` 在 Go 源码中是通过类似多叉树的结构组织的。
-	//    `context.WithCancel(parentCtx)` 相当于在父节点下挂了一个子节点，并返回了一把专门切断这个子节点连线的“刀”（cancel 函数）。
-	// 2. 级联收割：大厂面试题常问：“子 Context 被 cancel 时，父 Context 会怎样？”
-	//    答：父节点毫无影响。但反过来，“如果父节点被 cancel，子节点会怎样？”
-	//    答：父节点会顺着底层的 `children map` 遍历，把底下挂着的所有子子孙孙 Context 全部 cancel 掉（级联销毁）。
-	// 3. Cronix 的落地：这里我们拿到了这把刀（cancel），把它存进花名册 `m.states` 里。
-	//    当用户在网页上点击“停止任务”时，我们只要从花名册抽出这把刀调一下 `cancel()`。
-	//    底下正在 `select <-ctx.Done()` 阻塞监听的恶龙协程，瞬间就会收到信号并 return，完美杜绝了 Goroutine 泄露！
+	// 🔬 【底层原理·深度剖析】取消机制的内核映射：
+	// 1. 取消树（Cancellation Tree）：`context` 在 Go 源码中通过类似多叉树（children map）组织。
+	//    `context.WithCancel(parentCtx)` 相当于在父节点下挂了一个子节点，并返回一把专门切断这个节点的“刀”（cancel）。
+	// 2. 级联销毁：当调用 cancel() 时，它不仅会关闭当前的 done channel，还会递归遍历所有子孙 Context 级联 cancel。
+	// 3. 跨越用户态到内核态的斩杀：
+	//    在这个守护系统中，Context 传递给了 Executor。当 `cancel()` 触发时：
+	//    - 用户态：`<-ctx.Done()` 通道被关闭，Executor 协程苏醒。
+	//    - 内核态：Executor 内部检测到信号，立即向底层真实的 Linux 子进程发送 `SIGTERM` 信号。若进程头铁 5 秒不退，补发 `SIGKILL` 物理强杀。
+	//    - 终极清理：进程死后，Executor 调用底层 `wait4` 系统调用进行“收尸”，彻底释放内核中的 PID 和 PCB，彻底消灭僵尸进程！
 	ctx, cancel := context.WithCancel(parentCtx)
 
        now := time.Now() // 获取系统当前时间
@@ -296,6 +311,13 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			wasScheduled = execCtx.Err() != nil && ctx.Err() == nil
 			execCancel() 
 		} else {
+			// 🔬 【底层原理·深度剖析】进程收割（waitpid）阻塞模型
+			// 这一行代码是守护进程的生命线。它内部通过 `os/exec` 的 `Cmd.Wait()` 挂起当前协程。
+			// 在 Linux 内核层面，这实际上是触发了 `wait4` / `waitpid` 系统调用。
+			// 为什么必须阻塞等在这里？
+			// 因为根据 POSIX 标准，子进程终止后会变为“僵尸进程（Zombie）”，它的退出码（Exit Code）和资源信息还在内核态驻留。
+			// 只有父进程调用了 wait，内核才会彻底销毁这个进程（释放 PCB 和 PID）。
+			// 此处的阻塞，既是对任务生命周期的监控，也是对操作系统底层的资源回收！
 			m.executor.ExecuteTaskWithContext(ctx, taskID)
 		}
 
@@ -307,6 +329,13 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 			return
 		default:
 		}
+
+		// 🧪 【测试工程·质量保障】Mock 与隔离验证
+		// 面试官问：如何不连真实数据库测试这段复杂的守护逻辑？
+		// 答：由于我们通过 `execSvc LogQuerier` 定义了接口（面向接口编程，依赖倒置），
+		// 在单元测试中可以使用 GoMock/Testify 动态生成一个假的 execSvc 塞进 DaemonMonitor，
+		// 我们可以模拟 GetLatestLog 返回不同的状态（如持续报错），从而验证 Daemon 能否正确地触发 Exponential Backoff 退避和 FATAL 熔断。
+		// 实现了业务调度代码与物理层 DB 层的 100% 解耦！
 
 		// 检查一下刚干的活是成功还是失败了
 		var latestLog model.ExecutionLog
@@ -373,17 +402,30 @@ func (m *DaemonMonitor) runDaemonLoop(ctx context.Context, taskID uint, task *mo
 				return
 			}
 
-			// 【算法考点：指数退避算法 (Exponential Backoff)】
-			// 每次失败后，等待的时间呈指数级增长：1s -> 2s -> 4s -> 8s...
-			// 这样可以极大地减轻下游服务死机时的压力（雪崩效应的解决之道）。
+			// ⚡ 【性能实战·生产调优】指数退避算法 (Exponential Backoff) 与“惊群效应”
+			// 
+			// 生活比喻：
+			// 就像大家去排队买限量球鞋，如果店门没开，所有人每隔一秒钟疯狂敲门一次，这扇门（下游数据库或API）瞬间就会被锤烂。
+			// 退避算法就是要求大家：第一次敲不开等1秒，第二次敲不开等2秒，第三次等4秒、8秒... 指数级拉开间隔。
+			//
+			// 🔬 【底层原理·深度剖析】
+			// - 代码实现：利用移位运算符 `1 << x` 高效计算 2 的 x 次方。`restartCount=1` 等 1s，`=2` 等 2s，以此类推。
+			// - 最大熔断顶：`restartCount >= 7` 时锁定在 60s（最多等一分钟），防止出现等了 10 年都不拉起的离谱 Bug。
+			//
+			// 🛡️ 【安全攻防·漏洞防线】Jitter（随机抖动）防御策略
+			// 面试官极度喜欢追问：“如果1000个节点同时断网，按上述逻辑，它们是否会永远在同一秒一起苏醒重试？”
+			// 答：会的！这就叫“惊群效应”（Thundering Herd）。几千个并发重试瞬间会把刚恢复的数据库再次压死。
+			// 解决对策（高阶演进）：引入 Jitter（随机抖动）因子。
+			// 工业级正确做法应当是 `backoff = ExponentialDelay + rand.Intn(1000)*Millisecond`。
+			// 给每一个退避时间加上随机的几十毫秒偏移量，把洪峰流量打散成平缓的曲线！本项目虽采用极简版，但在大规模高并发微服务场景中，Jitter 是保命符。
 			var backoff time.Duration
 			if useFixedDelay {
 				backoff = time.Duration(restartDelaySec) * time.Second
 			} else {
-				if restartCount >= 7 { // 2的6次方是64，最多等1分钟左右
+				if restartCount >= 7 { // 限制最大避退上限，防止整型溢出或无限期休眠
 					backoff = 60 * time.Second
 				} else {
-					// 移位运算符 `<<`。 1 << x 就是 2 的 x 次方。
+					// 移位运算符 `<<`。 1 << x 就是 2 的 x 次方。极大提升 CPU 时钟周期效率。
 					backoff = time.Duration(1<<uint(restartCount-1)) * time.Second
 				}
 			}

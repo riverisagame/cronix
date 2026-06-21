@@ -8,6 +8,27 @@
 // 2. 根据老板的要求，翻找档案（分页查询、筛选日志）。
 // 3. 每天给老板提供一份统计图表（DashboardStats）。
 //
+// 🏗️ 【架构设计·模式对比】应用服务层 (Application Service) 在 DDD 架构中的作用
+// 面试官：你们的 Service 层是做什么的？和 Domain 层有什么区别？
+// 标准答案：在 DDD（领域驱动设计）中，Application Service 是“用例编排者（Use Case Orchestrator）”。
+// 1. 不包含核心业务规则：它不负责决定“任务能不能跑”，这属于 Domain Model（领域模型）的职责。
+// 2. 门面与协调者：它作为对外暴露的门面（Facade），负责从 DB 获取数据，组装实体，调用实体的业务方法，最后将结果存回 DB。
+// 3. 事务与隔离：它控制数据库事务的边界，确保用例执行的原子性。本文件中的 ExecutionService 就是专门编排和聚合任务执行结果的调度服务。
+// 💀 【踩坑血泪·反面教材】：不要把几千行的 if-else 业务判断全塞在 Service 里，那叫“贫血模型（Anemic Domain Model）”，维护起来简直是灾难！
+//
+// 🛡️ 【安全攻防·漏洞防线】幂等性设计 (Idempotency) 防止任务重复执行
+// 面试官：如果由于网络抖动或定时器 Bug，同一个调度任务在 1 秒内被触发了两次，怎么保证任务不重复跑？
+// 标准答案：在编排执行日志（ExecutionService）时必须引入“幂等性”。
+// 1. 唯一流水号：每次执行必须携带唯一的 ExecutionID。在数据库日志表设置唯一约束，发生冲突（Duplicate Key）时直接拦截并静默抛弃重复请求。
+// 2. 状态机排他（乐观锁）：在真正启动任务前，使用 `UPDATE tasks SET status='Running' WHERE id=? AND status='Pending'`。
+//    受影响行数(RowsAffected)为0，则说明已经被其他协程/节点抢占，当前请求立即中止。
+//
+// 🔬 【底层原理·深度剖析】分布式锁与本地锁防并发重入
+// 面试官：对于一些耗时较长的数据同步任务，如果到了下个执行周期还没跑完，怎么防止并发重入？
+// 标准答案：根据部署架构选择锁的粒度。
+// 1. 单机架构（本地锁）：在 Go 中使用 `sync.Mutex` 或者通过内存中的 `Concurrent Map` 记录正在执行的 TaskID。本文件中的缓存刷新就采用了读写锁防重入。
+// 2. 分布式架构（分布式锁）：在多副本部署下，必须依赖外部存储。使用 Redis 的 `SET key value NX PX 30000` 或基于 ETCD/Zookeeper 的分布式锁。获取锁失败则表明任务正在运行，防止重入导致的脏数据。
+//
 // ============================================================
 // 💡 【大厂面试·底层原理扩展：全链路并发优化与海量数据处理】
 // 
@@ -200,6 +221,13 @@ func (s *ExecutionService) GetAllLogs(page, pageSize int, taskName, status, sinc
 //   today_total: 今天执行的总次数
 //   today_success: 今天成功的次数
 //   today_failed: 今天失败的次数
+//
+// ⚡ 【性能实战·生产调优】Double-Check 本地锁防并发计算（缓存击穿）
+// 面试官：你们的报表查询怎么防缓存击穿？
+// 标准答案：采用 DCL（Double-Checked Locking）双重检查锁定模式。
+// 第一个 RLock (读锁) 检查缓存，如果 miss (未命中)，必须释放读锁并升级为 Lock (写锁)。
+// 获取写锁后，必须【再次检查】缓存。因为在释放 RLock 到获取 Lock 的纳秒级时间差内，
+// 可能别的 Goroutine 已经抢先算完了并写回了缓存。如果不做二次检查，排队等锁的 1000 个协程就会轮流去查 5 次 DB，直接把 DB 打挂！
 func (s *ExecutionService) GetDashboardStats() (map[string]interface{}, error) {
 	// 【第一道防线】：先看黑板（缓存）有没有现成的
 	s.cache.mu.RLock() // 加读锁：我要看黑板了，不要擦
@@ -343,6 +371,15 @@ func (s *ExecutionService) ExportLogsStream(taskName, status, since string, maxR
 
 // CleanOldLogs 删除超过指定天数的旧日志
 // 参数 retentionDays：保留天数（超过这个天数的日志会被删除）
+//
+// 💀 【踩坑血泪·反面教材】大表数据清理的“删库跑路”级灾难
+// 面试官：如果这张日志表有 1 亿条数据，要删除 1000 万条半年前的旧数据，直接用 GORM 执行 `DELETE WHERE created_at < ?` 会发生什么？
+// 标准答案：会引发史诗级线上故障！
+// 1. 锁表与长事务：海量 DELETE 会形成一个超长事务。由于扫描范围太大，MySQL的间隙锁/行锁可能退化为表锁，导致所有新任务日志无法写入，系统雪崩。
+// 2. 磁盘爆满与主从延迟：一次性删除 1000 万行会产生几 GB 甚至几十 GB 的 Undo Log 和 Binlog，瞬间占满磁盘。同时从库重放这个巨型 Binlog 会引发严重的主从复制延迟。
+// ⚡ 【性能实战·生产调优】优化方案（大厂做法）：
+// - 方案A（小批量删除）：改成 `DELETE FROM logs WHERE created_at < ? LIMIT 1000`，放在 for 循环里删，每删一次 `time.Sleep` 50毫秒，平滑释放磁盘 IO。
+// - 方案B（表分区 Partition）：在 MySQL 级别对表进行按月/按周分区，清理数据时直接 `ALTER TABLE logs DROP PARTITION p202512`，毫秒级完成，且几乎无 IO。
 func (s *ExecutionService) CleanOldLogs(retentionDays int) error {
 	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour) // 计算截止时间
 	return s.DB.Where("created_at < ?", cutoff).Delete(&model.ExecutionLog{}).Error // 删除早于截止时间的记录
@@ -359,6 +396,11 @@ func (s *ExecutionService) GetLatestLog(taskID uint) (*model.ExecutionLog, error
 }
 
 // ClearAllLogs 清空所有执行日志（单任务和组任务），大扫除
+//
+// 🏗️ 【架构设计·模式对比】缓存一致性模式：Cache Aside Pattern
+// 观察以下代码：为什么我们在数据库 Delete 成功后，去调用 `InvalidateStatsCache`（擦除缓存），而不是去“计算并更新”缓存？
+// 面试标准答案：在并发场景下，“更新缓存”很容易因为时序错乱导致脏数据（比如 A 线程先更新，B 线程后更新，但 B 线程的数据库事务先于 A 提交）。
+// 业界最佳实践是使用 Cache Aside 模式：【更新数据库 -> 删除缓存】。由下一次 Read 请求去懒加载计算缓存，这保证了最终一致性且逻辑更简单。
 func (s *ExecutionService) ClearAllLogs() (int64, int64, error) {
 	r1 := s.DB.Where("1 = 1").Delete(&model.ExecutionLog{}) // Where 1=1 是个小技巧，绕过 GORM 的“禁止全局删除”安全保护
 	if r1.Error != nil {
